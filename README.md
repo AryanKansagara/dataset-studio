@@ -2,7 +2,7 @@
 
 Turn raw data into a Together AI fine-tuning file that will actually train.
 
-Live: https://dataset-studio.vercel.app
+Live: https://dataset-studio-sepia.vercel.app
 
 ## The pain
 

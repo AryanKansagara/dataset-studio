@@ -25,6 +25,9 @@ function client(): Promise<SupabaseClient> {
   return (clientP ??= import('@supabase/supabase-js').then(({ createClient }) => createClient(URL_, KEY, { auth: { persistSession: true, storageKey: 'ds.auth' } })))
 }
 
+/** Start loading the client early (e.g. when the sign-in dialog opens). */
+export function warmClient() { client().catch(() => {}) }
+
 /** Only touch Supabase at startup if a session was stored before (keeps first paint free of it). */
 export async function initAuth() {
   if (!localStorage.getItem('ds.auth')) return
@@ -64,21 +67,31 @@ function push(p: Project) {
   if (!state.email) return
   set({ status: 'syncing' })
   clearTimeout(pushTimers.get(p.id))
-  pushTimers.set(p.id, setTimeout(() => {
-    pushTimers.delete(p.id)
-    pushChain = pushChain.then(async () => {
-      const latest = projects$.get()?.find((x) => x.id === p.id)
-      if (!latest || !state.email) return
-      try {
-        const sb = await client()
-        const { error } = await sb.from('projects').upsert(payload(latest))
-        if (error) throw error
-        if (!pushTimers.size) set({ status: 'synced', lastSync: new Date().toISOString(), error: undefined })
-      } catch (e) {
-        set({ status: netError(e) ? 'offline' : 'error', error: (e as Error).message })
-      }
-    })
-  }, 400))
+  pushTimers.set(p.id, setTimeout(() => upload(p.id), 400))
+}
+
+function upload(id: string) {
+  clearTimeout(pushTimers.get(id))
+  pushTimers.delete(id)
+  pushChain = pushChain.then(async () => {
+    const latest = projects$.get()?.find((x) => x.id === id)
+    if (!latest || !state.email) return
+    try {
+      const sb = await client()
+      const { error } = await sb.from('projects').upsert(payload(latest))
+      if (error) throw error
+      if (!pushTimers.size) set({ status: 'synced', lastSync: new Date().toISOString(), error: undefined })
+    } catch (e) {
+      set({ status: netError(e) ? 'offline' : 'error', error: (e as Error).message })
+    }
+  })
+}
+
+// don't lose a debounced upload when the tab is closed or hidden
+if (typeof window !== 'undefined') {
+  const flush = () => { for (const id of [...pushTimers.keys()]) upload(id) }
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush() })
 }
 
 export async function pushVersion(projectId: string, v: Version) {
@@ -122,7 +135,7 @@ export async function syncAll() {
       const { error: e2 } = await sb.from('projects').upsert(toPush.map(payload))
       if (e2) throw e2
     }
-    set({ status: 'synced', lastSync: new Date().toISOString(), error: undefined })
+    set({ status: pushTimers.size ? 'syncing' : 'synced', lastSync: new Date().toISOString(), error: undefined })
   } catch (e) {
     set({ status: netError(e) ? 'offline' : 'error', error: (e as Error).message })
   }

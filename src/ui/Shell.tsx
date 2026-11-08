@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { A, Icon, Modal, Monogram, download } from './common.tsx'
 import { dismissToast, exportAllData, toast, toasts$, useObs } from '../lib/store.ts'
-import { auth$, deleteAccount, deleteCloudData, signIn, signOut, signUp, syncAll, type SyncStatus } from '../lib/sync.ts'
+import { auth$, deleteAccount, deleteCloudData, signIn, signOut, signUp, syncAll, warmClient, type SyncStatus } from '../lib/sync.ts'
 import { usePath } from '../router.ts'
 
 export function useTheme(): ['light' | 'dark', () => void] {
@@ -85,6 +85,7 @@ function AuthDialog({ mode, onClose, onSwitch }: { mode: 'signin' | 'signup'; on
   const [pw, setPw] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  useEffect(() => { warmClient() }, [])
   const submit = async (e: React.FormEvent) => {
     e.preventDefault()
     setBusy(true); setErr('')

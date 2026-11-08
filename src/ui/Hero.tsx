@@ -169,9 +169,7 @@ export function Hero() {
         <div className="pipe-bottom">
           <div>
             <div className="row" style={{ marginBottom: 4 }}>
-              <span className="label hist-cap">Token length · log scale</span>
-              <span className="spacer" />
-              <span className="label" style={{ color: 'var(--orange)' }}>--max-seq-length {LIMIT}</span>
+              <span className="label">Tokens per example · log scale</span>
             </div>
             <Histogram counts={hist} limit={LIMIT} height={150} width={400} />
           </div>

@@ -113,7 +113,7 @@ export default function Landing() {
             <div>
               <span className="tag">Ready to upload</span>
               <h2 style={{ fontSize: 'clamp(30px,3.6vw,44px)', margin: '14px 0 16px' }}>The exact commands, with the right flags.</h2>
-              <p className="muted" style={{ fontSize: 17 }}>Generated from your model, method, split and max sequence length, pinned to <code>together=={TOGETHER_SDK_VERSION}</code>. Python SDK version included. DPO gets <code>--training-method dpo</code>; chat data gets <code>--train-on-inputs</code>.</p>
+              <p className="muted" style={{ fontSize: 17 }}>Generated from your model, method, split and max sequence length, pinned to <code>together=={TOGETHER_SDK_VERSION}</code>, for both the <code>tg</code> CLI and the Python SDK. DPO gets <code>--training-method dpo</code>; chat data gets <code>--train-on-inputs</code>.</p>
               <div className="row" style={{ marginTop: 24 }}><A href="/app?sample=1" className="btn">See it on the sample</A></div>
             </div>
             <pre className="code" aria-label="Example generated CLI command">{highlight(shown)}</pre>
