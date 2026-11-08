@@ -146,7 +146,7 @@ export type PiiKind = 'email' | 'phone' | 'card' | 'secret' | 'ip'
 export const PII_LABEL: Record<PiiKind, string> = { email: 'Email address', phone: 'Phone number', card: 'Card number', secret: 'API key / secret', ip: 'IP address' }
 
 const SECRET_PATTERNS: RegExp[] = [
-  /\bsk-(?:proj-|ant-[a-z0-9]+-)?[A-Za-z0-9_-]{20,}/g,      // OpenAI / Anthropic style
+  /\bsk-(?:proj-|ant-[a-z0-9]+-)?[A-Za-z0-9_-]{20,}/g,      // sk- style provider keys
   /\bAKIA[0-9A-Z]{16}\b/g,                                  // AWS access key id
   /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g,                         // GitHub tokens
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,                       // Slack
