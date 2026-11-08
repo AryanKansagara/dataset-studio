@@ -1,0 +1,32 @@
+{
+  "name": "dataset-studio",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Turn raw data into a Together AI fine-tuning file that will actually train.",
+  "author": "Aryan Kansagara",
+  "scripts": {
+    "dev": "vite --port 4334",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --port 4334",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "@huggingface/jinja": "^0.5.11",
+    "@huggingface/tokenizers": "^0.2.0",
+    "@supabase/supabase-js": "^2.119.0",
+    "hyparquet": "^1.32.0",
+    "hyparquet-compressors": "^1.1.3",
+    "hyparquet-writer": "^0.18.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.2.1",
+    "typescript": "~5.9.0",
+    "vite": "^8.3.6"
+  }
+}
