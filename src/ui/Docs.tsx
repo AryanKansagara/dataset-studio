@@ -114,11 +114,24 @@ export default function Docs() {
           </ul>
           <p>A file must use one format; Together rejects files that mix them. ShareGPT (<code>from</code>/<code>value</code>) conversations and JSON-encoded message columns are converted automatically. Parquet export from the studio is <i>pre-tokenized</i> (<code>input_ids</code>, <code>attention_mask</code>, <code>labels</code>), which is what Together expects for Parquet; it is not offered for DPO, which Together does not support pre-tokenized.</p>
 
+          <h3 id="tested" style={{ margin: "20px 0 8px" }}>Tested against real public datasets</h3>
+          <p>The importer is run against the real layouts of these Hugging Face datasets (rows API and parquet export, checked 2026-11-16), and the test suite keeps short excerpts of each:</p>
+          <ul>
+            <li><a href="https://huggingface.co/datasets/HuggingFaceH4/no_robots" target="_blank" rel="noreferrer">HuggingFaceH4/no_robots</a> (CC BY-NC 4.0): <code>messages</code> plus <code>prompt</code>/<code>prompt_id</code> metadata, which is dropped; <code>category</code> becomes the label.</li>
+            <li><a href="https://huggingface.co/datasets/databricks/databricks-dolly-15k" target="_blank" rel="noreferrer">databricks/databricks-dolly-15k</a> (CC BY-SA 3.0), also as CSV and TSV: instruction + context → prompt, response → completion.</li>
+            <li><a href="https://huggingface.co/datasets/tatsu-lab/alpaca" target="_blank" rel="noreferrer">tatsu-lab/alpaca</a> (CC BY-NC 4.0): the pre-rendered <code>text</code> column no longer hides instruction/input/output.</li>
+            <li><a href="https://huggingface.co/datasets/trl-lib/ultrafeedback_binarized" target="_blank" rel="noreferrer">trl-lib/ultrafeedback_binarized</a> (MIT): chosen/rejected as whole conversations map to DPO; in the first 100 rows the validator flags one identical pair and one empty rejected answer.</li>
+            <li><a href="https://huggingface.co/datasets/argilla/distilabel-intel-orca-dpo-pairs" target="_blank" rel="noreferrer">argilla/distilabel-intel-orca-dpo-pairs</a> (Apache 2.0): <code>input</code> and <code>system</code> columns feed the DPO input; answers that happen to be JSON stay text.</li>
+            <li><a href="https://huggingface.co/datasets/teknium/OpenHermes-2.5" target="_blank" rel="noreferrer">teknium/OpenHermes-2.5</a>: ShareGPT turns carrying <code>"weight": null</code> are read as unweighted.</li>
+            <li><a href="https://huggingface.co/datasets/openai/gsm8k" target="_blank" rel="noreferrer">openai/gsm8k</a> (MIT): question/answer → a user/assistant chat.</li>
+          </ul>
+          <p>The built-in messy sample is synthetic and labelled as such.</p>
+
           <h2 id="checks">What is checked</h2>
-          <table className="t">
+          <div style={{ overflowX: 'auto' }}><table className="t">
             <thead><tr><th>Code</th><th>Check</th><th>Fix</th></tr></thead>
             <tbody>{(Object.keys(ISSUE_INFO) as IssueCode[]).map((c) => <tr key={c}><td className="mono tiny">{c}</td><td className="small">{ISSUE_INFO[c].title}</td><td className="small muted">{ISSUE_INFO[c].fix}</td></tr>)}</tbody>
-          </table>
+          </table></div>
           <p style={{ marginTop: 14 }}>Quality checks: exact duplicates (normalised text hash), near-duplicates (MinHash, 64 permutations, 16 LSH bands, word 3-grams), train/validation leakage (shared prompts or near-duplicates across the split), PII and secrets (emails, phones, Luhn-checked cards, IPs, sk- style provider keys, AWS/GitHub/Slack/Hugging Face/Google/Stripe keys, JWTs, private keys), boilerplate refusals, language mix (script + stopword detection), answer-length outliers (robust log-scale bounds) and label imbalance. Oversize lines are flagged before tokenization when they cannot fit max_seq_length even at {LIMITS.oversizeBytesPerToken} bytes per token.</p>
           <p>The SDK's own client-side check only confirms UTF-8 and one JSON object per line; schema validation happens on Together's servers after upload (<a href={SOURCES.sdkChecks} target="_blank" rel="noreferrer">source</a>). Together's support article also notes that its checker <a href={SOURCES.checkerFaq} target="_blank" rel="noreferrer">does not catch every error</a>.</p>
 
@@ -154,6 +167,7 @@ export default function Docs() {
           <h2 id="limits">Known limits</h2>
           <ul>
             <li>Language detection covers English, Spanish, French, German, Portuguese and Italian by stopwords, and CJK, Cyrillic, Arabic and Devanagari by script.</li>
+            <li>Rows are passed through as-is only when they carry nothing but Together's keys; any extra column sends them through the mapper, which writes only the schema keys.</li>
             <li>Kimi models use a tiktoken tokenizer that does not load in the browser, so their counts are estimates.</li>
             <li>Multimodal (image) content parts are validated for structure but images are not inspected.</li>
             <li>Near-duplicate detection on more than a few hundred thousand rows takes a while; it runs in the worker so the page stays usable.</li>

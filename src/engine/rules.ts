@@ -3,7 +3,7 @@
 // together-py SDK source on RULES_CHECKED. Re-check the sources before relying
 // on a number for a large job; Together updates these pages often.
 
-export const RULES_CHECKED = '2026-11-07'
+export const RULES_CHECKED = '2026-11-16'
 
 export const SOURCES = {
   dataPrep: 'https://docs.together.ai/docs/fine-tuning-data-preparation',
@@ -87,6 +87,8 @@ export const MODELS: ModelSpec[] = [
   { id: 'deepseek-ai/DeepSeek-V3.1', name: 'DeepSeek V3.1', org: 'DeepSeek', ctxSft: 65536, ctxDpo: 32768, full: false, price: { loraSft: 7, loraDpo: 17.5, min: 20 }, tokenizer: 'deepseek-ai/DeepSeek-V3.1', activeB: 37 },
   { id: 'deepseek-ai/DeepSeek-V4-Flash-0731', name: 'DeepSeek V4 Flash 0731', org: 'DeepSeek', ctxSft: 131072, ctxDpo: 32768, full: false, price: { loraSft: 6, loraDpo: 15, min: 12 }, tokenizer: 'deepseek-ai/DeepSeek-V4-Flash-0731', activeB: 13 },
   { id: 'zai-org/GLM-5.2', name: 'GLM 5.2', org: 'Z.ai', ctxSft: 50688, ctxDpo: 25344, full: false, price: { loraSft: 40, loraDpo: 100, min: 60 }, tokenizer: 'zai-org/GLM-5.2', activeB: 40 },
+  { id: 'zai-org/GLM-5.1', name: 'GLM 5.1', org: 'Z.ai', ctxSft: 50688, ctxDpo: 25344, full: false, price: { loraSft: 40, loraDpo: 100, min: 60 }, tokenizer: 'zai-org/GLM-5.1', activeB: 40 },
+  { id: 'moonshotai/Kimi-K2.7-Code', name: 'Kimi K2.7 Code', org: 'Moonshot AI', ctxSft: 32768, ctxDpo: 16384, full: false, price: { loraSft: 15, loraDpo: 37.5, min: 60 }, tokenizer: null, activeB: 32 },
   { id: 'moonshotai/Kimi-K2.6', name: 'Kimi K2.6', org: 'Moonshot AI', ctxSft: 32768, ctxDpo: 16384, full: false, price: { loraSft: 15, loraDpo: 37.5, min: 60 }, tokenizer: null, activeB: 32 },
 ]
 

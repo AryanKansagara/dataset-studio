@@ -570,7 +570,7 @@ table.t tbody tr.click:hover td { background: var(--panel-2); }
 .toc { position: sticky; top: 90px; align-self: start; display: grid; gap: 2px; }
 .toc a { font-size: 13.5px; color: var(--ink-3); text-decoration: none; padding: 5px 0; }
 .toc a:hover { color: var(--ink); }
-@media (max-width: 900px) { .doc-layout { grid-template-columns: 1fr; } .toc { display: none; } }
+@media (max-width: 900px) { .doc-layout { grid-template-columns: minmax(0, 1fr); } .doc code { overflow-wrap: anywhere; } .toc { display: none; } }
 
 .notfound { text-align: center; padding: 120px 0 40px; }
 .notfound .big { font-size: 120px; letter-spacing: -.05em; background: var(--grad-brand); -webkit-background-clip: text; background-clip: text; color: transparent; line-height: 1; }

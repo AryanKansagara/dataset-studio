@@ -141,7 +141,10 @@ export function ImportStep({ project, reattach }: { project: Project; reattach: 
                 <button className="btn" onClick={peekHf}>Preview &amp; map</button>
               </div>
             ) : (
+              <>
               <p className="tiny faint" style={{ marginTop: 10 }}>Reads the dataset's parquet export directly from the Hub with range requests. Public datasets only. <button className="btn ghost small" style={{ padding: 0, height: 'auto', textTransform: 'none', letterSpacing: 0, fontFamily: 'var(--font)', fontSize: 12, textDecoration: 'underline' }} onClick={() => void fetchHf(SAMPLE_HF_ID)}>Try {SAMPLE_HF_ID}</button></p>
+              <p className="tiny faint" style={{ marginTop: 6 }}>Also tested: {REAL_HF.map((d, i) => <span key={d.id}>{i ? ' · ' : ''}<button className="btn ghost small" style={{ padding: 0, height: 'auto', textTransform: 'none', letterSpacing: 0, fontFamily: 'var(--font)', fontSize: 12, textDecoration: 'underline' }} onClick={() => void fetchHf(d.id)} title={d.note}>{d.id}</button></span>)}</p>
+              </>
             )}
           </div>
           <div className="card pad">
@@ -156,10 +159,17 @@ export function ImportStep({ project, reattach }: { project: Project; reattach: 
   )
 }
 
+/** Public datasets whose real layouts the importer is tested against (see /docs). */
+const REAL_HF = [
+  { id: 'databricks/databricks-dolly-15k', note: 'Instruction / context / response, with a category label' },
+  { id: 'trl-lib/ultrafeedback_binarized', note: 'DPO pairs given as whole conversations' },
+  { id: 'teknium/OpenHermes-2.5', note: 'ShareGPT from/value conversations' },
+]
+
 const FIELDS: Record<Format, { key: keyof Mapping; label: string; optional?: boolean }[]> = {
   conversational: [{ key: 'messages', label: 'Messages column', optional: true }, { key: 'system', label: 'System column', optional: true }, { key: 'user', label: 'User column', optional: true }, { key: 'assistant', label: 'Assistant column', optional: true }],
   instruction: [{ key: 'prompt', label: 'Prompt' }, { key: 'input', label: 'Extra input (appended)', optional: true }, { key: 'completion', label: 'Completion' }],
-  preference: [{ key: 'prompt', label: 'Prompt / context', optional: true }, { key: 'chosen', label: 'Preferred (chosen)' }, { key: 'rejected', label: 'Non-preferred (rejected)' }],
+  preference: [{ key: 'prompt', label: 'Prompt / context', optional: true }, { key: 'chosen', label: 'Preferred (chosen)' }, { key: 'rejected', label: 'Non-preferred (rejected)' }, { key: 'system', label: 'System prompt', optional: true }],
   text: [{ key: 'text', label: 'Text' }],
 }
 

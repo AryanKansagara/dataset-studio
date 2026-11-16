@@ -1,5 +1,6 @@
 /** Column mapping: turn arbitrary rows into one of Together's four JSONL formats. */
 import { isObj } from './util.ts'
+import { LIMITS } from './rules.ts'
 
 export type Format = 'conversational' | 'instruction' | 'preference' | 'text'
 
@@ -17,6 +18,7 @@ export interface Mapping {
   /** conversational: a column holding a list of messages (OpenAI or ShareGPT style). */
   messages?: string
   /** conversational from flat columns */
+  /** conversational and preference: a column holding a per-row system prompt */
   system?: string
   user?: string
   assistant?: string
@@ -49,7 +51,7 @@ const NAME_HINTS: Record<string, string[]> = {
   system: ['system', 'system_prompt', 'instructions'],
   user: ['question', 'user', 'query', 'customer', 'customer_message', 'human', 'request', 'input_text'],
   assistant: ['answer', 'assistant', 'agent', 'agent_reply', 'reply', 'response', 'gpt', 'bot'],
-  prompt: ['prompt', 'instruction', 'question', 'query', 'source'],
+  prompt: ['prompt', 'instruction', 'question', 'query', 'source', 'input'],
   input: ['input', 'context'],
   completion: ['completion', 'output', 'response', 'answer', 'target', 'summary'],
   chosen: ['chosen', 'preferred', 'preferred_output', 'better', 'response_a'],
@@ -88,14 +90,21 @@ export function suggestMapping(columns: string[], sample: Record<string, unknown
     const l = pick(columns, 'label', new Set(taken))
     return l && !['messages', 'prompt', 'completion', 'text'].includes(l) ? l : undefined
   }
-  if (fmt && (fmt !== 'conversational' || looksLikeMessages(first.messages)) && (fmt !== 'text' || typeof first.text === 'string')) {
+  // Pass rows through untouched only when they carry nothing but Together's keys. Hugging Face exports add
+  // metadata (no_robots: prompt, prompt_id) or a pre-rendered "text" column (Alpaca); those go through the mapper.
+  const onlyKnownKeys = !!fmt && Object.keys(first).every((k) => (LIMITS.rootKeys[fmt] as readonly string[]).includes(k) || k === label())
+  if (fmt && onlyKnownKeys && (fmt !== 'conversational' || looksLikeMessages(first.messages)) && (fmt !== 'text' || typeof first.text === 'string')) {
     return { format: fmt, identity: true, label: label() }
+  }
+  // Preference pairs first: TRL/UltraFeedback-style chosen/rejected columns hold whole conversations.
+  const chosen = pick(columns, 'chosen', new Set(taken))
+  const rejected = pick(columns, 'rejected', new Set(taken))
+  if (chosen && rejected && chosen !== rejected) {
+    taken.add(chosen); taken.add(rejected)
+    return { format: 'preference', identity: false, chosen, rejected, prompt: pick(columns, 'prompt', taken), system: pick(columns, 'system', taken), label: label() }
   }
   const msgCol = columns.find((c) => sample.some((r) => looksLikeMessages(r[c])))
   if (msgCol) { taken.add(msgCol); return { format: 'conversational', identity: false, messages: msgCol, system: pick(columns, 'system', taken), label: label() } }
-  const chosen = pick(columns, 'chosen', taken)
-  const rejected = pick(columns, 'rejected', taken)
-  if (chosen && rejected) return { format: 'preference', identity: false, chosen, rejected, prompt: pick(columns, 'prompt', taken), label: label() }
   const completion = pick(columns, 'completion', new Set(taken))
   const promptCol = pick(columns, 'prompt', new Set(taken))
   if (promptCol && completion && promptCol !== completion) {
@@ -131,6 +140,8 @@ export function toMessages(v: unknown): unknown {
   return x.map((m) => {
     if (isObj(m) && !('role' in m) && 'from' in m) {
       const { from, value, ...rest } = m
+      // ShareGPT exports (OpenHermes, SlimOrca) carry "weight": null; null means unset, not an invalid weight.
+      for (const k of Object.keys(rest)) if (rest[k] === null) delete rest[k]
       return { role: SHAREGPT_ROLES[String(from).toLowerCase()] ?? String(from), content: value, ...rest }
     }
     return m
@@ -140,14 +151,15 @@ export function toMessages(v: unknown): unknown {
 const str = (v: unknown) => (v === null || v === undefined ? '' : typeof v === 'string' ? v : typeof v === 'object' ? JSON.stringify(v) : String(v))
 
 function outputMessages(v: unknown): unknown {
-  const x = parseMaybeJson(v)
+  // An answer that is itself JSON (a list of triples, a JSON object) is text, not a message list.
+  const x = looksLikeMessages(v) ? parseMaybeJson(v) : v
   if (Array.isArray(x)) {
     const msgs = toMessages(x) as unknown[]
     // chosen/rejected given as whole conversations: keep only the final assistant turn
     const last = msgs[msgs.length - 1]
     return isObj(last) ? [last] : msgs
   }
-  if (isObj(x) && 'role' in x) return [x]
+  if (isObj(x) && 'role' in x && 'content' in x) return [x]
   return [{ role: 'assistant', content: str(x) }]
 }
 
@@ -186,12 +198,15 @@ export function applyMapping(row: Record<string, unknown>, m: Mapping): Mapped {
       break
     }
     case 'preference': {
-      const pv = m.prompt ? parseMaybeJson(row[m.prompt]) : ''
+      let pv = m.prompt ? parseMaybeJson(row[m.prompt]) : ''
+      // Together-shaped input ({"messages": [...]}) with extra metadata columns
+      if (isObj(pv) && Array.isArray(pv.messages)) pv = pv.messages
       let messages = Array.isArray(pv) ? (toMessages(pv) as unknown[]) : [{ role: 'user', content: str(pv) }]
       // chosen/rejected given as full conversations: the shared prefix is the input
-      const ch = parseMaybeJson(m.chosen ? row[m.chosen] : '')
-      if (!m.prompt && Array.isArray(ch)) messages = (toMessages(ch) as unknown[]).slice(0, -1)
-      if (m.systemText && !(isObj(messages[0]) && messages[0].role === 'system')) messages = [{ role: 'system', content: m.systemText }, ...messages]
+      const ch = m.chosen ? row[m.chosen] : ''
+      if (!m.prompt && looksLikeMessages(ch)) messages = (toMessages(ch) as unknown[]).slice(0, -1)
+      const sys = m.system && str(row[m.system]).trim() ? str(row[m.system]) : m.systemText
+      if (sys && !(isObj(messages[0]) && messages[0].role === 'system')) messages = [{ role: 'system', content: sys }, ...messages]
       rec = { input: { messages }, preferred_output: outputMessages(ch), non_preferred_output: outputMessages(m.rejected ? row[m.rejected] : '') }
       break
     }

@@ -20,7 +20,9 @@ Together's upload-time check confirms the file is UTF-8 with one JSON object per
 - **Projects and versions** stored locally in IndexedDB; every saved pipeline run is a version with a compare view (row counts, token distribution shift, what was dropped and why).
 - **Optional accounts** (Supabase email + password) sync settings, pipelines and version stats across devices. Raw rows never leave the browser.
 
-Rules, context lengths and prices live in [`src/engine/rules.ts`](src/engine/rules.ts), dated with source links.
+**Tested on real data:** the importer is checked against the real layouts of HuggingFaceH4/no_robots, databricks/databricks-dolly-15k (also as CSV/TSV), tatsu-lab/alpaca, trl-lib/ultrafeedback_binarized, argilla/distilabel-intel-orca-dpo-pairs, teknium/OpenHermes-2.5 and openai/gsm8k, with short excerpts kept in `src/engine/realdata.test.ts`. Sources and licences are listed in the docs. The built-in messy sample is synthetic.
+
+Rules, context lengths and prices (re-checked against Together's pages on 2026-11-16) live in [`src/engine/rules.ts`](src/engine/rules.ts), dated with source links.
 
 ## Run locally
 
