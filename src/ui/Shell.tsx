@@ -145,7 +145,7 @@ export function Footer() {
     <footer className="footer">
       <div className="wrap">
         <span className="row" style={{ gap: 8 }}><Monogram /> Dataset Studio</span>
-        <span>Built by Aryan Kansagara. Independent project, not affiliated with Together AI.</span>
+        <span>Built by Aryan Kansagara.</span>
         <span className="spacer" />
         <A href="/docs">Docs</A>
         <A href="/docs#rules">Rules &amp; prices</A>
