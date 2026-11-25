@@ -2,8 +2,8 @@
 import type { Format } from './mapping.ts'
 import { validateRecord, hasError, type Issue, type IssueCode, ISSUE_INFO } from './validate.ts'
 import {
-  answerText, dedupeText, detectLanguage, exactKey, findPii, fullText, hasLabel, isRefusal, labelStats, mapText, minhash,
-  nearDuplicateClusters, normalize, outlierBounds, promptText, redact, shingles, type LabelStats, type PiiKind,
+  answerText, dedupeText, detectLanguage, exactKey, findPiiInRecord, fullText, hasLabel, isRefusal, labelStats, mapText, minhash,
+  nearDuplicateClusters, normalize, outlierBounds, promptText, redactRecord, shingles, type LabelStats, type PiiKind,
 } from './quality.ts'
 import { countRecord, smartTruncate, tokenStats, type TokenizerLike, type TokenStats } from './tokens.ts'
 import { LIMITS } from './rules.ts'
@@ -235,7 +235,7 @@ export function applyOps(base: Row[], ops: Op[], ctx: PipelineCtx): PipelineResu
         keep((_, i) => !drop.has(i))
         break
       }
-      case 'redactPii': { const kinds = new Set(op.kinds); modify((rec) => mapText(rec, fmt, (s) => redact(s, kinds).text)); break }
+      case 'redactPii': { const kinds = new Set(op.kinds); modify((rec) => redactRecord(rec, kinds)); break }
       case 'dropRefusals': keep((r) => !r.rec || !isRefusal(answerText(r.rec, fmt))); break
       case 'filterLanguage': { const k = new Set(op.keep); keep((r) => !r.rec || k.has(detectLanguage(fullText(r.rec, fmt)))); break }
       case 'dropOutliers': {
@@ -394,7 +394,7 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
   const langOf = new Map<number, string>()
   for (const r of live) {
     const text = fullText(r.rec, fmt)
-    const hits = findPii(text)
+    const hits = findPiiInRecord(r.rec)
     if (hits.length) {
       piiRows++
       const kinds = new Set(hits.map((h) => h.kind))
