@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { A, Icon, Modal, Progress, fmtInt } from './common.tsx'
+import { A, Icon, Modal, NumberInput, Progress, fmtInt, whole } from './common.tsx'
 import { Page } from './Shell.tsx'
 import { saveProject, toast, useObs, projects$, type Project } from '../lib/store.ts'
 import { navigate } from '../router.ts'
@@ -169,6 +169,7 @@ function Toolbar({ project }: { project: Project }) {
   const { s, update } = useSession()
   const model = getModel(project.job.model)
   const ctx = project.job.method === 'dpo' ? model.ctxDpo : model.ctxSft
+  const setMaxSeq = (maxSeq: number | null) => void update((p) => ({ ...p, job: { ...p.job, maxSeq } }))
   const orgs = [...new Set(MODELS.map((m) => m.org))]
   return (
     <div className="toolbar no-print">
@@ -180,8 +181,7 @@ function Toolbar({ project }: { project: Project }) {
       </label>
       <label className="field" style={{ width: 170 }}>
         <span>max_seq_length</span>
-        <input className="input num" type="number" min={128} max={ctx} step={128} placeholder={`${ctx} (model max)`} value={project.job.maxSeq ?? ''}
-          onChange={(e) => { const v = e.target.value ? Math.min(ctx, Math.max(128, Number(e.target.value))) : null; void update((p) => ({ ...p, job: { ...p.job, maxSeq: v } })) }} />
+        <NumberInput min={128} max={ctx} step={128} placeholder={`${ctx} (model max)`} value={project.job.maxSeq} fix={whole(128, ctx)} onValue={setMaxSeq} onClear={() => setMaxSeq(null)} />
       </label>
       <div className="field">
         <span>Tokenizer</span>
