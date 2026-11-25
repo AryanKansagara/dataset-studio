@@ -3,7 +3,7 @@ import { test, expect } from './test.ts'
 import { chat, check, choose, downloaded, exportAll, file, importButton, importFile, jsonl, newProject, quality, rule, setModel, stat, step } from './helpers.ts'
 import { serveTokenizer } from './hub.ts'
 
-// Open bugs. Each test states the correct behaviour and is expected to fail until the issue is fixed;
+// Fixed bugs. Each test states the correct behaviour. Write a test for a new open bug with `test.fail`:
 // when it starts to pass, the suite goes red: remove `.fail`.
 const issue = (n: number) => `https://github.com/AryanKansagara/dataset-studio/issues/${n}`
 const cardCount = (page: Parameters<typeof quality>[0], t: string) => quality(page, t).locator('.big')
@@ -197,7 +197,7 @@ test(`an empty file says that it is empty (${issue(16)})`, async ({ page }) => {
   await expect(page.getByText(/is empty|no rows|no readable/i).first()).toBeVisible({ timeout: 2000 })
 })
 
-test.fail(`searching the validation report by text filters it (${issue(17)})`, async ({ page }) => {
+test(`searching the validation report by text filters it (${issue(17)})`, async ({ page }) => {
   await importFile(page, file('s.jsonl', jsonl({ prompt: '', completion: 'c' }, { prompt: 'p', completion: 'c', ticket: 1 })), 2)
   await page.getByLabel('Search issues').fill('ticket')
   await expect(page.getByText('1 of 1 shown')).toBeVisible({ timeout: 2000 })

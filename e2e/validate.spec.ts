@@ -95,3 +95,15 @@ test('markup in the data is shown as text', async ({ page }) => {
   await expect(page.locator('img[src=x]')).toHaveCount(0)
   await expect(page).not.toHaveTitle('pwned')
 })
+
+test('the report is searched by message text or by line number (#17)', async ({ page }) => {
+  // lines 1 and 12 have an empty prompt, the others an empty completion
+  await importFile(page, file('s.jsonl', jsonl(...[...Array(12).keys()].map((i) => (i === 0 || i === 11 ? { prompt: '', completion: `c${i}` } : { prompt: `p${i}`, completion: '' })))), 12)
+  const search = page.getByLabel('Search issues')
+  for (const [q, n] of [['', 12], ['prompt', 2], [' PROMPT ', 2], ['completion', 10], ['nothing like it', 0], ['12', 1], ['1', 4], ['#12', 1], ['line 12', 1], ['99', 0], ['prompt 12', 0], ['  ', 12]] as const) {
+    await search.fill(q)
+    await expect(page.getByText(`${n} of ${n} shown`)).toBeVisible()
+  }
+  await search.fill('nothing like it')
+  await expect(page.getByText('No matching findings.')).toBeVisible()
+})

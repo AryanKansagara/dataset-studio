@@ -24,7 +24,11 @@ export function ValidateStep({ project }: { project: Project }) {
   const [q, setQ] = useState('')
   const [shown, setShown] = useState(150)
   const codes = (Object.entries(r.issues.byCode) as [IssueCode, number][]).sort((a, b) => (a[0][0] === b[0][0] ? b[1] - a[1] : a[0][0] === 'E' ? -1 : 1))
-  const list = useMemo(() => r.issues.list.filter((i) => (!code || i.code === code) && (!q || String(i.line).startsWith(q.replace(/\D/g, '')) || i.msg.toLowerCase().includes(q.toLowerCase()))), [r, code, q])
+  const list = useMemo(() => {
+    const text = q.trim().toLowerCase()
+    const line = /^(?:line\s*)?#?\s*(\d+)$/.exec(text)?.[1]
+    return r.issues.list.filter((i) => (!code || i.code === code) && ((line !== undefined && String(i.line).startsWith(line)) || i.msg.toLowerCase().includes(text)))
+  }, [r, code, q])
   const clean = r.rows - r.issues.rowsWithErrors - r.issues.rowsWithWarnings
   const fixAll: Op[] = [{ type: 'repairStructure' }, { type: 'stripUnknownKeys' }, { type: 'dropInvalid' }]
   const csv = () => {
