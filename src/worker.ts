@@ -119,21 +119,28 @@ async function peek(src: Source): Promise<Peek & { name: string; size: number }>
   }
   if (src.kind === 'hf') {
     const items = await hfItems(src, 200)
-    return { ...peekFrom('parquet', items), name: `hf://${src.dataset}`, size: 0 }
+    return { ...peekFrom('parquet', items, src.dataset), name: `hf://${src.dataset}`, size: 0 }
   }
   const kind = await fileKind(src.file)
   let items: RawItem[] = []
+  let more = false // rows after the preview
   if (kind === 'parquet') {
     items = await parquetItems({ byteLength: src.file.size, slice: (s, e) => src.file.slice(s, e).arrayBuffer() }, 200)
     if (items[0] && typeof items[0].value === 'object' && items[0].value && 'input_ids' in (items[0].value as object))
       throw new Error('This Parquet file is already pre-tokenized (input_ids). Upload it to Together as-is; Dataset Studio works on text before tokenization.')
   } else if (kind === 'json') {
-    for await (const it of readItems('json', streamFile(src.file))) { items.push(it); if (items.length >= 200) break }
+    for await (const it of readItems('json', streamFile(src.file))) { if (items.length >= 200) { more = true; break } items.push(it) }
   } else {
-    // a CSV is not cut for the preview: the last row would look like a broken one
-    for await (const it of readItems(kind, streamFile(kind === 'csv' ? src.file : src.file.slice(0, 1 << 20) as File))) { items.push(it); if (items.length >= 200) break }
+    // the file is not cut for the preview: the last row would look like a broken one
+    let bytes = 0
+    for await (const it of readItems(kind, streamFile(src.file))) {
+      if (items.length >= 200 || bytes >= 1 << 20) { more = true; break }
+      items.push(it)
+      bytes += it.bytes
+    }
   }
-  return { ...peekFrom(kind, items), name: src.file.name, size: src.file.size }
+  const blank = !items.length && kind !== 'parquet' && !(await src.file.slice(0, 1 << 16).text()).trim()
+  return { ...peekFrom(kind, items, src.file.name, blank, more), name: src.file.name, size: src.file.size }
 }
 
 async function ingest(src: Source, mapping: Mapping): Promise<{ rows: number; format: Format; parseErrors: number; formatGuess: Format | null; columns: string[] }> {

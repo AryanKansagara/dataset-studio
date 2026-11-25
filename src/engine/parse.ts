@@ -13,6 +13,8 @@ export interface RawItem {
   error?: 'E_JSON' | 'E_NOT_OBJECT' | 'E_CSV'
   /** What exactly is wrong, when the error code alone does not say it. */
   message?: string
+  /** What the JSON parser says, for the import preview. */
+  detail?: string
   badUtf8?: boolean
 }
 
@@ -95,9 +97,10 @@ export async function* readJsonl(chunks: AsyncIterable<Uint8Array>): AsyncGenera
       const v = JSON.parse(t)
       if (typeof v !== 'object' || v === null || Array.isArray(v)) { item.error = 'E_NOT_OBJECT'; item.text = t.slice(0, 400) }
       else item.value = v
-    } catch {
+    } catch (e) {
       item.error = 'E_JSON'
       item.text = t.slice(0, 400)
+      item.detail = String((e as Error).message).slice(0, 200)
     }
     yield item
   }
@@ -214,6 +217,39 @@ export async function* readCsv(chunks: AsyncIterable<Uint8Array>): AsyncGenerato
   }
 }
 
+const JSON_TOKEN = /[{}[\],:]|"[^"\\\x00-\x1f]*(?:\\(?:["\\/bfnrt]|u[0-9a-fA-F]{4})[^"\\\x00-\x1f]*)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/y
+
+/** Where a JSON document stops being valid: the parser's message does not always say. */
+export function jsonErrorAt(text: string): number {
+  const open: string[] = []
+  let want: 'value' | 'value or ]' | 'key' | 'key or }' | ':' | ', or end' = 'value'
+  let pos = 0
+  for (;;) {
+    while (' \t\r\n'.includes(text[pos] || 'x')) pos++
+    JSON_TOKEN.lastIndex = pos
+    const t = JSON_TOKEN.exec(text)?.[0]
+    if (t === undefined) return pos
+    const inside = open[open.length - 1]
+    if (want === ', or end') {
+      if (t === ',' && inside) want = inside === '{' ? 'key' : 'value'
+      else if (inside && t === (inside === '{' ? '}' : ']')) open.pop()
+      else return pos
+    } else if (want === ':') {
+      if (t !== ':') return pos
+      want = 'value'
+    } else if (want === 'key' || want === 'key or }') {
+      if (t === '}' && want === 'key or }') { open.pop(); want = ', or end' }
+      else if (t[0] === '"') want = ':'
+      else return pos
+    } else if (t === ']' && want === 'value or ]') { open.pop(); want = ', or end' }
+    else if (t === '{') { open.push(t); want = 'key or }' }
+    else if (t === '[') { open.push(t); want = 'value or ]' }
+    else if (',:]}'.includes(t)) return pos
+    else want = ', or end'
+    pos += t.length
+  }
+}
+
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 /** A list of chat turns is one value of an example, not a list of examples. */
 const isTurns = (v: unknown) => Array.isArray(v) && v.every((m) => isObject(m) && (('role' in m && ('content' in m || 'tool_calls' in m)) || ('from' in m && 'value' in m)))
@@ -233,7 +269,8 @@ function rowsOfObject(doc: Record<string, unknown>): unknown[] {
 export function readJson(text: string, badUtf8 = false): RawItem[] {
   let doc: unknown
   try { doc = JSON.parse(text) } catch (e) {
-    return [{ line: 1, bytes: text.length, error: 'E_JSON', text: String((e as Error).message).slice(0, 200) }]
+    const detail = String((e as Error).message).slice(0, 200)
+    return [{ line: text.slice(0, jsonErrorAt(text)).split('\n').length, bytes: text.length, error: 'E_JSON', text: detail, detail }]
   }
   const arr = Array.isArray(doc) ? doc : isObject(doc) ? rowsOfObject(doc) : []
   return arr.map((v, i) => {
