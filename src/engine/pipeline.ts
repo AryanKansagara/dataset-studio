@@ -68,12 +68,17 @@ export interface SplitSettings { valFraction: number; seed: number; stratify: bo
 
 export interface LogEntry { op: Op; label: string; dropped: number; modified: number; droppedLines: number[] }
 
+/** Cached per-record token counter: the longest side, or every side (preference rows have two). */
+export interface TokenCounter {
+  (rec: Record<string, unknown>): number
+  sides: (rec: Record<string, unknown>) => number[]
+}
+
 export interface PipelineCtx {
   format: Format
   split: SplitSettings
   tokenizer?: TokenizerLike | null
-  /** cached per-record token counter (max side) */
-  tokens?: (rec: Record<string, unknown>) => number
+  tokens?: TokenCounter
 }
 
 // ---------- validation ----------
@@ -463,13 +468,20 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
     const counts = pool.map((r) => ctx.tokens!(r.rec))
     const st = tokenStats(counts, opt.limit)
     const scale = sampleN ? live.length / Math.max(pool.length, 1) : 1
-    let trainT = 0, valT = 0
-    pool.forEach((r, i) => { const c = Math.min(counts[i], opt.limit) * (fmt === 'preference' ? 2 : 1); if (val.has(r.id)) valT += c; else trainT += c })
+    // lengths are per example (the longest side); totals and the bill count every side, each cut at the limit
+    let trainT = 0, valT = 0, total = 0, cut = 0
+    for (const r of pool) for (const n of ctx.tokens!.sides(r.rec)) {
+      const c = Math.min(n, opt.limit)
+      total += n
+      cut += n - c
+      if (val.has(r.id)) valT += c
+      else trainT += c
+    }
     const longest = pool.map((r, i) => [counts[i], r] as const).sort((a, b) => b[0] - a[0]).slice(0, 12)
       .map(([n, r]) => ({ id: r.id, line: r.line, text: snippet(promptText(r.rec, fmt) || fullText(r.rec, fmt)), extra: `${n.toLocaleString()} tokens` }))
     tokens = {
       ...st, exact: !sampleN, longest, sampled: pool.length, perSide: fmt === 'preference',
-      total: Math.round(st.total * scale), billable: Math.round(st.billable * scale), over: Math.round(st.over * scale), cut: Math.round(st.cut * scale),
+      total: Math.round(total * scale), billable: Math.round((trainT + valT) * scale), over: Math.round(st.over * scale), cut: Math.round(cut * scale),
       train: Math.round(trainT * scale), val: Math.round(valT * scale),
     }
   }
@@ -506,11 +518,12 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
 }
 
 /** Token counter with a per-record cache (records are immutable, so a WeakMap is safe). */
-export function cachedCounter(fmt: Format, tk: TokenizerLike): (rec: Record<string, unknown>) => number {
-  const cache = new WeakMap<object, number>()
-  return (rec) => {
+export function cachedCounter(fmt: Format, tk: TokenizerLike): TokenCounter {
+  const cache = new WeakMap<object, number[]>()
+  const sides = (rec: Record<string, unknown>) => {
     let n = cache.get(rec)
-    if (n === undefined) { n = Math.max(...countRecord(rec, fmt, tk)); cache.set(rec, n) }
+    if (n === undefined) { n = countRecord(rec, fmt, tk); cache.set(rec, n) }
     return n
   }
+  return Object.assign((rec: Record<string, unknown>) => Math.max(...sides(rec)), { sides })
 }

@@ -118,3 +118,22 @@ test('the stratified split is 27 and 3, disjoint, complete and repeatable', asyn
   await step(page, 'Export')
   await expect(async () => expect(await get('e2e.validation.jsonl')).not.toEqual(val)).toPass()
 })
+
+// Worked by hand: q + 100 words = 4 + 103 = 107, q + b = 4 + 4 = 8, both sides 115. At a limit of 128 nothing is cut; the second
+// pair is 4 + 153 = 157 and 8: 165 in total, 29 cut, 136 billed. Together 280 tokens, 115 + 136 = 251 billed for one epoch.
+test('DPO pairs: totals and the bill count both sides, each cut at the limit (#10)', async ({ page, context }) => {
+  await serveTokenizer(context)
+  const pair = (n: number) => ({ prompt: 'q', chosen: 'a '.repeat(n).trim(), rejected: 'b' })
+  await importFile(page, file('dpo.jsonl', jsonl(pair(100), pair(150))), 2)
+  await step(page, 'Tokens')
+  await page.getByLabel('max_seq_length').fill('128')
+  await page.getByLabel('max_seq_length').blur()
+  await expect(stat(page, 'Tokens')).toHaveText('280')
+  await expect(stat(page, 'Tokens cut')).toHaveText('29')
+  await expect(stat(page, 'Over the limit')).toHaveText('1')
+  await expect(statNote(page, 'Median · p95')).toHaveText('Max 157 per side')
+  await step(page, 'Split & cost')
+  await page.getByRole('slider').fill('0')
+  await page.getByLabel('Epochs').fill('1')
+  await expect(stat(page, 'Billed tokens')).toHaveText('251')
+})
