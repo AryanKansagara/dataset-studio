@@ -81,7 +81,7 @@ const parquetRows = async (page: Parameters<typeof quality>[0]) => {
   return await parquetReadObjects({ file: new Uint8Array(bytes).buffer as ArrayBuffer }) as { input_ids: number[]; labels: number[] }[]
 }
 
-test.fail(`Parquet never trains on the prompt when the template's generation prompt is not a prefix (${issue(6)})`, async ({ page, context }) => {
+test(`Parquet never trains on the prompt when the template's generation prompt is not a prefix (${issue(6)})`, async ({ page, context }) => {
   // Like Gemma 4: the generation prompt adds an empty thinking block that the finished conversation does not have.
   await serveTokenizer(context, "{% for m in messages %}<s> {{ m['role'] }} {{ m['content'] }} </s>\n{% endfor %}{% if add_generation_prompt %}<s> assistant q{% endif %}")
   await importFile(page, file('one.jsonl', jsonl(chat(['user', 'q'], ['assistant', 'a b']))), 1)
@@ -90,7 +90,7 @@ test.fail(`Parquet never trains on the prompt when the template's generation pro
   expect(row.labels).toEqual([-100, -100, -100, -100, -100, -100, 6, 7, 2])
 })
 
-test.fail(`Parquet masks assistant turns with weight 0 (${issue(6)})`, async ({ page, context }) => {
+test(`Parquet masks assistant turns with weight 0 (${issue(6)})`, async ({ page, context }) => {
   await serveTokenizer(context)
   await importFile(page, file('w.jsonl', jsonl({ messages: [{ role: 'user', content: 'q' }, { role: 'assistant', content: 'a', weight: 0 }, { role: 'user', content: 'q' }, { role: 'assistant', content: 'b' }] })), 1)
   const [row] = await parquetRows(page)

@@ -17,10 +17,27 @@ export function plainRender(messages: unknown[]): string {
   return messages.map((m) => (isObj(m) ? `${m.role}: ${contentText(m.content)}` : '')).join('\n') + '\n'
 }
 
-export function renderConversation(tk: TokenizerLike, messages: unknown[], tools?: unknown, addGenerationPrompt = false): string {
-  if (tk.render) {
-    try { return tk.render(messages, { tools, addGenerationPrompt }) } catch { /* template rejected the shape; fall back */ }
+/** Tool arguments as objects. The OpenAI format has them as JSON strings, which some templates reject. */
+function withObjectArguments(messages: unknown[]): unknown[] {
+  return messages.map((m) => isObj(m) && Array.isArray(m.tool_calls)
+    ? { ...m, tool_calls: m.tool_calls.map((c) => {
+      if (!isObj(c) || !isObj(c.function) || typeof c.function.arguments !== 'string') return c
+      try { return { ...c, function: { ...c.function, arguments: JSON.parse(c.function.arguments) } } } catch { return c }
+    }) }
+    : m)
+}
+
+/** Like renderConversation, but a row the template cannot render throws. */
+function renderStrict(tk: TokenizerLike, messages: unknown[], tools?: unknown, addGenerationPrompt = false): string {
+  if (!tk.render) return plainRender(messages) + (addGenerationPrompt ? 'assistant: ' : '')
+  try { return tk.render(messages, { tools, addGenerationPrompt }) } catch (e) {
+    if (!messages.some((m) => isObj(m) && Array.isArray(m.tool_calls) && m.tool_calls.length)) throw e
+    return tk.render(withObjectArguments(messages), { tools, addGenerationPrompt })
   }
+}
+
+export function renderConversation(tk: TokenizerLike, messages: unknown[], tools?: unknown, addGenerationPrompt = false): string {
+  try { return renderStrict(tk, messages, tools, addGenerationPrompt) } catch { /* template rejected the shape; fall back */ }
   return plainRender(messages) + (addGenerationPrompt ? 'assistant: ' : '')
 }
 
@@ -135,27 +152,56 @@ export function smartTruncate(rec: Record<string, unknown>, fmt: Format, tk: Tok
 
 export interface Tokenized { input_ids: number[]; labels: number[] }
 
+const MARK = '\u0001TURN\u0001'
+
+/** Where assistant message i sits in the rendered conversation, from after its header to after its end-of-turn token. */
+function assistantSpan(full: string, tk: TokenizerLike, msgs: unknown[], i: number, tools: unknown): [number, number] {
+  const render = (m: unknown[], gen = false): string | null => { try { return renderStrict(tk, m, tools, gen) } catch { return null } }
+  const prefix = render(msgs.slice(0, i), true)
+  const done = render(msgs.slice(0, i + 1))
+  let start = prefix !== null && full.startsWith(prefix) ? prefix.length : -1
+  let end = done !== null && full.startsWith(done) ? done.length : -1
+  if (start < 0 || end < 0) {
+    // Thinking templates: the generation prompt (Gemma 4) or an earlier turn (Qwen 3.5, gpt-oss) renders differently in the
+    // finished conversation. Mark the turn's content and read its place off the marked rendering.
+    const marked = msgs.map((m, j) => (j === i ? { ...(m as object), content: MARK } : m))
+    const whole = render(marked)
+    const at = whole ? whole.indexOf(MARK) : -1
+    if (whole && at >= 0 && full.startsWith(whole.slice(0, at))) {
+      if (start < 0) start = at
+      const contentEnd = full.length - (whole.length - at - MARK.length)
+      if (end < 0 && contentEnd > start && full.slice(contentEnd) === whole.slice(at + MARK.length)) {
+        const alone = render(marked.slice(0, i + 1))
+        const closing = alone?.slice(alone.indexOf(MARK) + MARK.length) ?? ''
+        const rest = full.slice(contentEnd)
+        // the end-of-turn token: as rendered for a last turn, otherwise the special token that follows the content
+        end = contentEnd + (rest.startsWith(closing) ? closing : /^\s*<[^<>\s]{1,40}>/.exec(rest)?.[0] ?? '').length
+      }
+    }
+  }
+  if (start < 0 || end <= start) throw new Error(`the chat template gives no clear place for message ${i + 1} (assistant), so its loss mask would be wrong`)
+  return [start, end]
+}
+
 /** Encode one record to input_ids + labels (-100 = masked from the loss), mirroring
- * train_on_inputs=false: only assistant turns / the completion are trained. */
+ * train_on_inputs=false: only assistant turns / the completion are trained, and never a turn with weight 0.
+ * Throws when the template cannot render the row or the turns cannot be located. */
 export function tokenizeRecord(rec: Record<string, unknown>, fmt: Format, tk: TokenizerLike, trainOnInputs: boolean, limit: number): Tokenized {
-  const segs: { text: string; train: boolean }[] = []
+  const segs: { text: string; train: boolean; never?: boolean }[] = []
   if (fmt === 'conversational') {
     const msgs = (Array.isArray(rec.messages) ? rec.messages : []) as unknown[]
-    const full = renderConversation(tk, msgs, rec.tools)
+    if (!tk.render && msgs.some((m) => isObj(m) && Array.isArray(m.tool_calls) && m.tool_calls.length)) throw new Error('the model has no chat template to write tool calls with')
+    let full: string
+    try { full = renderStrict(tk, msgs, rec.tools) } catch (e) { throw new Error(`the chat template rejects this row: ${(e as Error)?.message ?? e}`) }
     let pos = 0
     msgs.forEach((m, i) => {
       if (!isObj(m) || m.role !== 'assistant') return
-      const prefix = renderConversation(tk, msgs.slice(0, i), rec.tools, true)
-      const endStr = renderConversation(tk, msgs.slice(0, i + 1), rec.tools)
-      const start = prefix.length
-      // spans are only trustworthy when the template renders prefixes as prefixes
-      if (!full.startsWith(prefix) || !full.startsWith(endStr) || start < pos || start > endStr.length) return
-      if (start > pos) segs.push({ text: full.slice(pos, start), train: false })
-      segs.push({ text: full.slice(start, endStr.length), train: true })
-      pos = endStr.length
+      const [start, end] = assistantSpan(full, tk, msgs, i, rec.tools)
+      if (start < pos) throw new Error(`the chat template overlaps message ${i + 1} (assistant)`)
+      segs.push({ text: full.slice(pos, start), train: false }, { text: full.slice(start, end), train: true, never: m.weight === 0 })
+      pos = end
     })
-    if (pos < full.length) segs.push({ text: full.slice(pos), train: false })
-    if (!segs.some((s) => s.train)) { segs.length = 0; segs.push({ text: full, train: true }) }
+    segs.push({ text: full.slice(pos), train: false })
   } else if (fmt === 'instruction') {
     segs.push({ text: String(rec.prompt ?? ''), train: false }, { text: String(rec.completion ?? '') + (tk.eos ?? ''), train: true })
   } else {
@@ -166,7 +212,7 @@ export function tokenizeRecord(rec: Record<string, unknown>, fmt: Format, tk: To
   for (const s of segs) {
     if (!s.text) continue
     const ids = tk.ids(s.text)
-    for (const id of ids) { input_ids.push(id); labels.push(s.train || trainOnInputs ? id : -100) }
+    for (const id of ids) { input_ids.push(id); labels.push(!s.never && (s.train || trainOnInputs) ? id : -100) }
   }
   return { input_ids: input_ids.slice(0, limit), labels: labels.slice(0, limit) }
 }
