@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { A, Icon, Modal, Sparkline, fmtInt, timeAgo, fmtTokens } from './common.tsx'
 import { Page } from './Shell.tsx'
 import { deleteProject, newProject, projects$, restoreProject, saveProject, toast, useObs, type Project } from '../lib/store.ts'
-import { navigate } from '../router.ts'
+import { navigate, useSearch } from '../router.ts'
 import { FORMAT_LABEL } from '../engine/mapping.ts'
 import { getModel } from '../engine/rules.ts'
 import { ProjectView } from './Project.tsx'
@@ -10,19 +10,19 @@ import { ProjectView } from './Project.tsx'
 export default function Studio({ path }: { path: string }) {
   const projects = useObs(projects$)
   const m = path.match(/^\/app\/p\/([^/]+)(?:\/([a-z]+))?/)
-  const handledSample = useRef(false)
+  const search = useSearch()
+  const creatingSample = useRef(false)
+  const loaded = projects !== null
 
   useEffect(() => {
-    if (!projects || handledSample.current) return
-    const q = new URLSearchParams(location.search)
-    if (q.get('sample')) {
-      handledSample.current = true
-      void (async () => {
-        const p = await saveProject({ ...newProject('Support bot (messy sample)') })
-        navigate(`/app/p/${p.id}/import?sample=1`, { replace: true })
-      })()
-    }
-  }, [projects])
+    if (!loaded || creatingSample.current || m || !new URLSearchParams(search).get('sample')) return
+    creatingSample.current = true
+    void (async () => {
+      const p = await saveProject({ ...newProject('Support bot (messy sample)') })
+      navigate(`/app/p/${p.id}/import?sample=1`, { replace: true })
+      creatingSample.current = false
+    })()
+  }, [loaded, search, path]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!projects) return <Page><div className="skeleton" style={{ height: 200, marginTop: 40 }} /></Page>
   if (m) {

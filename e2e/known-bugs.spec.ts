@@ -98,10 +98,10 @@ test.fail(`Parquet masks assistant turns with weight 0 (${issue(6)})`, async ({ 
   expect(row.labels).toEqual([...Array(14).fill(-100), 7, 2])
 })
 
-test.fail(`"Try the sample" on an empty workspace opens the sample (${issue(7)})`, async ({ page }) => {
+test(`"Try the sample" on an empty workspace opens the sample (${issue(7)})`, async ({ page }) => {
   await page.goto('/app')
   await page.getByRole('link', { name: 'Try the sample' }).click()
-  await expect(stat(page, 'Examples')).toHaveText('1,200', { timeout: 10_000 })
+  await expect(stat(page, 'Examples')).toHaveText('1,200')
 })
 
 test.fail(`max_seq_length and the learning rate can be typed (${issue(8)})`, async ({ page }) => {
