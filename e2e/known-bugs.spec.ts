@@ -104,7 +104,7 @@ test(`"Try the sample" on an empty workspace opens the sample (${issue(7)})`, as
   await expect(stat(page, 'Examples')).toHaveText('1,200')
 })
 
-test.fail(`max_seq_length and the learning rate can be typed (${issue(8)})`, async ({ page }) => {
+test(`max_seq_length and the learning rate can be typed (${issue(8)})`, async ({ page }) => {
   await importFile(page, file('a.jsonl', jsonl({ prompt: 'p', completion: 'c' })), 1)
   await step(page, 'Split & cost')
   await page.getByLabel('max_seq_length').pressSequentially('4096')

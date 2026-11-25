@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { A, Icon, Modal, download, fmtInt } from './common.tsx'
+import { A, Icon, Modal, download, fmtInt, NumberInput, whole } from './common.tsx'
 import { Page, useTheme } from './Shell.tsx'
 import { exportAllData, projects$, saveSettings, settings$, toast, useObs, wipeLocal } from '../lib/store.ts'
 import { auth$ } from '../lib/sync.ts'
@@ -26,7 +26,7 @@ export default function Settings() {
           <div className="map-grid">
             <label className="field"><span>Validation share</span><input className="input num" type="number" min={0} max={0.5} step={0.01} value={s.valFraction} onChange={(e) => saveSettings({ valFraction: Math.min(0.5, Math.max(0, Number(e.target.value))) })} /></label>
             <label className="field"><span>Seed</span><input className="input num" type="number" value={s.seed} onChange={(e) => saveSettings({ seed: Number(e.target.value) || 0 })} /></label>
-            <label className="field"><span>Epochs</span><input className="input num" type="number" min={1} value={s.epochs} onChange={(e) => saveSettings({ epochs: Math.max(1, Number(e.target.value) || 1) })} /></label>
+            <label className="field"><span>Epochs</span><NumberInput min={1} value={s.epochs} fix={whole(1)} onValue={(epochs) => saveSettings({ epochs })} /></label>
           </div>
           <label className="switch"><input type="checkbox" checked={s.exactTokens} onChange={(e) => saveSettings({ exactTokens: e.target.checked })} />Count tokens for every row (otherwise datasets over 20,000 rows are sampled)</label>
         </section>

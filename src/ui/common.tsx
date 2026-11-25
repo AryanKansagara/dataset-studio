@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react'
 import { HIST_EDGES } from '../engine/tokens.ts'
 import { toast } from '../lib/store.ts'
 import { linkHandler } from '../router.ts'
@@ -234,3 +234,24 @@ export function timeAgo(iso: string) {
   if (s < 86400 * 30) return `${Math.floor(s / 86400)} d ago`
   return new Date(iso).toLocaleDateString()
 }
+
+/** A number field that does not rewrite what is being typed: valid values apply at once, others are made valid by `fix`
+ * when the field is left. An emptied field gives null if `onClear` is set and otherwise goes back to its value. */
+export function NumberInput({ value, fix, onValue, onClear, ...rest }: {
+  value: number | null
+  fix: (n: number) => number
+  onValue: (n: number) => void
+  onClear?: () => void
+} & Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'onBlur' | 'type'>) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const set = (text: string, leaving: boolean) => {
+    const n = Number(text)
+    if (text === '' || !Number.isFinite(n)) return
+    if (leaving || fix(n) === n) onValue(fix(n))
+  }
+  return <input className="input num" type="number" {...rest} value={draft ?? value ?? ''}
+    onChange={(e) => { setDraft(e.target.value); if (e.target.value === '' && !e.target.validity.badInput) onClear?.(); set(e.target.value, false) }}
+    onBlur={() => { if (draft !== null) { set(draft, true); setDraft(null) } }} />
+}
+
+export const whole = (min: number, max = Infinity) => (n: number) => Math.min(max, Math.max(min, Math.round(n)))

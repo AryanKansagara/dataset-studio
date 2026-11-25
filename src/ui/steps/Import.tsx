@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Icon, Progress, fmtBytes, fmtInt } from '../common.tsx'
+import { Icon, NumberInput, Progress, fmtBytes, fmtInt, whole } from '../common.tsx'
 import { engine, type HfInfo, type Source } from '../../lib/engine.ts'
 import { toast, type Project, type SourceInfo } from '../../lib/store.ts'
 import { navigate } from '../../router.ts'
@@ -136,7 +136,7 @@ export function ImportStep({ project, reattach }: { project: Project; reattach: 
                       {hfInfo.configs.map((c) => <option key={`${c.config}/${c.split}`} value={`${c.config}/${c.split}`}>{c.config} / {c.split} ({fmtBytes(c.files.reduce((a, f) => a + f.size, 0))})</option>)}
                     </select>
                   </label>
-                  <label className="field" style={{ flex: 1, minWidth: 110 }}><span>Max rows</span><input className="input num" type="number" min={10} step={1000} value={hfPick.maxRows} onChange={(e) => setHfPick((p) => ({ ...p, maxRows: Math.max(10, Number(e.target.value) || 0) }))} /></label>
+                  <label className="field" style={{ flex: 1, minWidth: 110 }}><span>Max rows</span><NumberInput min={10} step={1000} value={hfPick.maxRows} fix={whole(10)} onValue={(maxRows) => setHfPick((p) => ({ ...p, maxRows }))} /></label>
                 </div>
                 <button className="btn" onClick={peekHf}>Preview &amp; map</button>
               </div>

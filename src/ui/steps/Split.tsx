@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Icon, fmtInt, fmtTokens } from '../common.tsx'
+import { Icon, NumberInput, fmtInt, fmtTokens, whole } from '../common.tsx'
 import type { Project } from '../../lib/store.ts'
 import { getModel, RULES_CHECKED, SOURCES, assumedThroughput } from '../../engine/rules.ts'
 import { estimateCost, fmtDuration, fmtUsd } from '../../engine/cost.ts'
@@ -64,11 +64,11 @@ export function SplitStep({ project }: { project: Project }) {
             </div>
             {isPref && job.method !== 'dpo' && <p className="small" style={{ color: 'var(--warn)' }}>Preference data trains with DPO. Switch the method to DPO.</p>}
             <div className="map-grid">
-              <label className="field"><span>Epochs</span><input className="input num" type="number" min={1} max={20} value={job.epochs} onChange={(e) => setJob({ epochs: Math.max(1, Number(e.target.value) || 1) })} /></label>
-              <label className="field"><span>Evaluations (n_evals)</span><input className="input num" type="number" min={0} max={100} value={job.nEvals} onChange={(e) => setJob({ nEvals: Math.max(0, Number(e.target.value) || 0) })} /></label>
-              <label className="field"><span>Learning rate</span><input className="input num" type="number" step="any" value={job.learningRate} onChange={(e) => setJob({ learningRate: Number(e.target.value) || 1e-5 })} /></label>
+              <label className="field"><span>Epochs</span><NumberInput min={1} max={20} value={job.epochs} fix={whole(1)} onValue={(epochs) => setJob({ epochs })} /></label>
+              <label className="field"><span>Evaluations (n_evals)</span><NumberInput min={0} max={100} value={job.nEvals} fix={whole(0)} onValue={(nEvals) => setJob({ nEvals })} /></label>
+              <label className="field"><span>Learning rate</span><NumberInput step="any" value={job.learningRate} fix={(n) => (n > 0 ? n : 1e-5)} onValue={(learningRate) => setJob({ learningRate })} /></label>
               {job.method === 'dpo'
-                ? <label className="field"><span>DPO beta</span><input className="input num" type="number" step={0.05} min={0.05} max={0.9} value={job.dpoBeta} onChange={(e) => setJob({ dpoBeta: Number(e.target.value) || 0.1 })} /></label>
+                ? <label className="field"><span>DPO beta</span><NumberInput step={0.05} min={0.05} max={0.9} value={job.dpoBeta} fix={(n) => Math.min(0.9, Math.max(0.05, n))} onValue={(dpoBeta) => setJob({ dpoBeta })} /></label>
                 : <label className="field"><span>train_on_inputs</span><select className="input" value={job.trainOnInputs} onChange={(e) => setJob({ trainOnInputs: e.target.value as JobSettings['trainOnInputs'] })}><option value="auto">auto (assistant / completion only)</option><option value="false">false</option><option value="true">true (also learn prompts)</option></select></label>}
               <label className="field"><span>Model suffix</span><input className="input" placeholder="support-bot-v3" value={job.suffix} onChange={(e) => setJob({ suffix: e.target.value.replace(/[^\w.-]/g, '-').slice(0, 40) })} /></label>
             </div>
@@ -92,7 +92,7 @@ export function SplitStep({ project }: { project: Project }) {
             <div className="note"><Icon name="check" size={13} /><span>Formula from the pricing page: training tokens × epochs, plus validation tokens × number of evaluations, subject to the per-model minimum ({fmtUsd(cost.minCharge)}).</span></div>
             <div className="note"><Icon name="check" size={13} /><span>Each example counts at most max_seq_length tokens{t.perSide ? '; DPO counts both the preferred and non-preferred side' : ''}.{!t.exact && ' Token totals are extrapolated from a sample.'}</span></div>
             <div className="row wrap-row" style={{ gap: 6 }}><Icon name="bolt" size={13} /> Time is an assumption, not a quote: Together does not publish throughput. Assuming
-              <input className="input num" type="number" style={{ width: 100, height: 28 }} value={Math.round(tput ?? cost.throughput)} onChange={(e) => setTput(Math.max(100, Number(e.target.value) || 0))} aria-label="Assumed throughput in tokens per second" />
+              <NumberInput style={{ width: 100, height: 28 }} value={Math.round(tput ?? cost.throughput)} fix={whole(100)} onValue={setTput} aria-label="Assumed throughput in tokens per second" />
               tokens/s{tput !== null && <button className="btn ghost small" onClick={() => setTput(null)}>reset ({fmtInt(assumedThroughput(model.activeB))} base)</button>}</div>
           </div>
         </div>
