@@ -115,7 +115,7 @@ test.fail(`max_seq_length and the learning rate can be typed (${issue(8)})`, asy
   await expect(page.getByLabel('Learning rate')).toHaveValue('0.0002', { timeout: 2000 })
 })
 
-test.fail(`a Full job's CLI command asks for full fine-tuning (${issue(9)})`, async ({ page }) => {
+test(`a Full job's CLI command asks for full fine-tuning (${issue(9)})`, async ({ page }) => {
   await importFile(page, file('a.jsonl', jsonl({ prompt: 'p', completion: 'c' })), 1)
   await step(page, 'Split & cost')
   await page.getByRole('button', { name: 'Full', exact: true }).click()
@@ -123,7 +123,7 @@ test.fail(`a Full job's CLI command asks for full fine-tuning (${issue(9)})`, as
   await expect(page.locator('.codebox pre')).toContainText('--no-lora', { timeout: 2000 })
 })
 
-test.fail(`the command's max_seq_length never exceeds the model's (${issue(9)})`, async ({ page }) => {
+test(`the command's max_seq_length never exceeds the model's (${issue(9)})`, async ({ page }) => {
   await importFile(page, file('a.jsonl', jsonl({ prompt: 'p', completion: 'c' })), 1)
   await setModel(page, 'Qwen3.5 4B')
   await page.getByLabel('max_seq_length').fill('131072')

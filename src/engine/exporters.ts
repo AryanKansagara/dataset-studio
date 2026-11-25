@@ -56,11 +56,11 @@ export function cliCommands(job: JobSettings, files: CommandFiles, format: Forma
   const flags: string[] = [`--training-file ${files.train}`]
   if (files.val) flags.push(`--validation-file ${files.val}`, `--n-evals ${job.nEvals}`)
   flags.push(`--model ${q(job.model)}`)
-  if (job.lora) flags.push('--lora')
+  flags.push(job.lora ? '--lora' : '--no-lora') // without a flag the API trains LoRA
   flags.push(`--n-epochs ${job.epochs}`, `--learning-rate ${job.learningRate}`)
   if (job.method === 'dpo') flags.push('--training-method dpo', `--dpo-beta ${job.dpoBeta}`)
   else if (format === 'conversational' || format === 'instruction') flags.push(`--train-on-inputs ${job.trainOnInputs}`)
-  if (job.maxSeq) flags.push(`--max-seq-length ${job.maxSeq}`)
+  if (job.maxSeq) flags.push(`--max-seq-length ${limitFor(job)}`)
   flags.push(`--random-seed ${job.seed}`)
   if (job.suffix) flags.push(`--suffix ${q(job.suffix)}`)
   lines.push('tg fine-tuning create \\', ...flags.map((f, i) => `  ${f}${i < flags.length - 1 ? ' \\' : ''}`))
@@ -75,7 +75,7 @@ export function pythonCommands(job: JobSettings, files: CommandFiles, format: Fo
   args.push(`    lora=${job.lora ? 'True' : 'False'},`, `    n_epochs=${job.epochs},`, `    learning_rate=${job.learningRate},`)
   if (job.method === 'dpo') args.push(`    training_method="dpo",`, `    dpo_beta=${job.dpoBeta},`)
   else if (format === 'conversational' || format === 'instruction') args.push(`    train_on_inputs=${job.trainOnInputs === 'auto' ? '"auto"' : job.trainOnInputs === 'true' ? 'True' : 'False'},`)
-  if (job.maxSeq) args.push(`    max_seq_length=${job.maxSeq},`)
+  if (job.maxSeq) args.push(`    max_seq_length=${limitFor(job)},`)
   args.push(`    random_seed=${job.seed},`)
   if (job.suffix) args.push(`    suffix=${q(job.suffix)},`)
   return [
