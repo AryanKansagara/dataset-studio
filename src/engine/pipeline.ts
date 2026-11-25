@@ -3,7 +3,7 @@ import type { Format } from './mapping.ts'
 import { validateRecord, hasError, type Issue, type IssueCode, ISSUE_INFO } from './validate.ts'
 import {
   answerText, dedupeText, detectLanguage, exactKey, findPiiInRecord, fullText, hasLabel, isRefusal, labelStats, mapText, minhash,
-  nearDuplicateClusters, normalize, outlierBounds, promptText, redactRecord, shingles, type LabelStats, type PiiKind,
+  nearDuplicateClusters, normalize, outlierBounds, promptText, redactRecord, shingles, toolCallKey, type LabelStats, type PiiKind,
 } from './quality.ts'
 import { countRecord, smartTruncate, tokenStats, type TokenizerLike, type TokenStats } from './tokens.ts'
 import { LIMITS } from './rules.ts'
@@ -159,9 +159,22 @@ export function splitRows(rows: Row[], s: SplitSettings): Set<number> {
 
 // ---------- dedupe / leakage helpers ----------
 
-function nearClusters(rows: Row[], fmt: Format, threshold: number): Int32Array {
-  const sigs = rows.map((r) => minhash(shingles(r.rec ? dedupeText(r.rec, fmt) : '')))
-  return nearDuplicateClusters(sigs, threshold)
+/** Near-duplicate cluster per row (-1 = none). Rows without text are never near-duplicates; with `sameCalls`, neither are
+ * rows whose tool calls differ. */
+function nearClusters(rows: Row[], fmt: Format, threshold: number, sameCalls: boolean): Int32Array {
+  const out = new Int32Array(rows.length).fill(-1)
+  const groups = new Map<string, { at: number[]; sigs: Uint32Array[] }>()
+  rows.forEach((r, i) => {
+    const sh = shingles(r.rec ? dedupeText(r.rec, fmt) : '')
+    if (!r.rec || !sh.size) return
+    const k = sameCalls ? toolCallKey(r.rec, fmt) : ''
+    let g = groups.get(k)
+    if (!g) groups.set(k, g = { at: [], sigs: [] })
+    g.at.push(i)
+    g.sigs.push(minhash(sh))
+  })
+  for (const { at, sigs } of groups.values()) nearDuplicateClusters(sigs, threshold).forEach((c, j) => { if (c >= 0) out[at[j]] = at[c] })
+  return out
 }
 
 /** Validation rows whose prompt or full text also appears (exactly or nearly) in train. */
@@ -175,7 +188,7 @@ export function findLeaks(rows: Row[], val: Set<number>, fmt: Format, threshold 
     if (trainKeys.has(exactKey(r.rec, fmt)) || (p.length > 20 && trainKeys.has(hash53(p)))) leaks.add(r.id)
   }
   const withRec = rows.filter((r) => r.rec)
-  const cl = nearClusters(withRec, fmt, threshold)
+  const cl = nearClusters(withRec, fmt, threshold, false)
   const clusterHasTrain = new Set<number>()
   withRec.forEach((r, i) => { if (cl[i] >= 0 && !val.has(r.id)) clusterHasTrain.add(cl[i]) })
   withRec.forEach((r, i) => { if (cl[i] >= 0 && val.has(r.id) && clusterHasTrain.has(cl[i])) leaks.add(r.id) })
@@ -229,7 +242,7 @@ export function applyOps(base: Row[], ops: Op[], ctx: PipelineCtx): PipelineResu
       }
       case 'dedupeNear': {
         const idx = rows.map((r, i) => (r.rec ? i : -1)).filter((i) => i >= 0)
-        const cl = nearClusters(idx.map((i) => rows[i]), fmt, op.threshold)
+        const cl = nearClusters(idx.map((i) => rows[i]), fmt, op.threshold, true)
         const seen = new Set<number>()
         const drop = new Set<number>()
         idx.forEach((ri, j) => { const c = cl[j]; if (c < 0) return; if (seen.has(c)) drop.add(ri); else seen.add(c) })
@@ -372,7 +385,7 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
 
   // near duplicates (excluding exact copies)
   const uniq = [...firstByKey.values()]
-  const cl = nearClusters(uniq, fmt, opt.nearThreshold ?? 0.8)
+  const cl = nearClusters(uniq, fmt, opt.nearThreshold ?? 0.8, true)
   const firstInCluster = new Map<number, Row>()
   const nearEx: Example[] = []
   let nearRows = 0

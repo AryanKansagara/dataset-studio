@@ -60,7 +60,39 @@ export function answerText(rec: Record<string, unknown>, fmt: Format): string {
 
 export const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, ' ').trim()
 
-export const exactKey = (rec: Record<string, unknown>, fmt: Format) => hash53(normalize(fullText(rec, fmt)))
+/** A JSON value with its object keys in one order, so that equal values are equal strings. */
+function canonical(v: unknown): unknown {
+  if (Array.isArray(v)) return v.map(canonical)
+  return isObj(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, canonical(v[k])])) : v
+}
+
+/** The calls of a message without their ids: the function and its arguments (JSON in a string, or an object). */
+function callsKey(m: Record<string, unknown>): unknown[] {
+  return (Array.isArray(m.tool_calls) ? m.tool_calls : []).map((c) => {
+    const f = isObj(c) && isObj(c.function) ? c.function : c
+    if (!isObj(f)) return f
+    let args: unknown = f.arguments
+    // numbers too long for JSON.parse stay text
+    if (typeof args === 'string' && !/\d{16}/.test(args)) try { args = JSON.parse(args) } catch { /* not JSON: compare the text */ }
+    return [f.name, canonical(args)]
+  })
+}
+
+const allMsgs = (rec: Record<string, unknown>, fmt: Format) => fmt === 'conversational' ? [msgsOf(rec.messages)]
+  : fmt === 'preference' ? [isObj(rec.input) ? msgsOf(rec.input.messages) : [], msgsOf(rec.preferred_output), msgsOf(rec.non_preferred_output)] : []
+
+/** Every tool call of a row as one string; '' when it has none. */
+export function toolCallKey(rec: Record<string, unknown>, fmt: Format): string {
+  const calls = allMsgs(rec, fmt).map((ms) => ms.map(callsKey))
+  return calls.some((ms) => ms.some((c) => c.length)) ? JSON.stringify(calls) : ''
+}
+
+/** Two rows are exact duplicates when every field is the same after normalising case and whitespace, tool calls included. */
+export function exactKey(rec: Record<string, unknown>, fmt: Format): number {
+  if (fmt === 'instruction') return hash53(JSON.stringify([normalize(String(rec.prompt ?? '')), normalize(String(rec.completion ?? ''))]))
+  if (fmt === 'text') return hash53(normalize(fullText(rec, fmt)))
+  return hash53(JSON.stringify(allMsgs(rec, fmt).map((ms) => ms.map((m) => [normalize(String(m.role)), normalize(contentText(m.content)), callsKey(m)]))))
+}
 
 // ---------- MinHash near duplicates ----------
 
