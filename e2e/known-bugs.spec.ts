@@ -8,7 +8,7 @@ import { serveTokenizer } from './hub.ts'
 const issue = (n: number) => `https://github.com/AryanKansagara/dataset-studio/issues/${n}`
 const cardCount = (page: Parameters<typeof quality>[0], t: string) => quality(page, t).locator('.big')
 
-test.fail(`an escaped quote on a 64 KB boundary does not corrupt a CSV row (${issue(2)})`, async ({ page }) => {
+test(`an escaped quote on a 64 KB boundary does not corrupt a CSV row (${issue(2)})`, async ({ page }) => {
   // The browser hands the file over in chunks that end on even offsets. Every row here is 6,006 bytes and starts on an even
   // offset, so every "" pair starts on an odd one and any chunk that ends inside a prompt splits a pair.
   let csv = 'prompt,completion\n'
@@ -20,7 +20,7 @@ test.fail(`an escaped quote on a 64 KB boundary does not corrupt a CSV row (${is
   expect(out.every((r) => r.prompt === '"'.repeat(3000))).toBe(true)
 })
 
-test.fail(`an unclosed quote is reported, not read as one long cell (${issue(2)})`, async ({ page }) => {
+test(`an unclosed quote is reported, not read as one long cell (${issue(2)})`, async ({ page }) => {
   await newProject(page)
   await choose(page, file('u.csv', 'prompt,completion\nq1,a1\n"q2,a2\nq3,a3\nq4,a4\n'))
   await importButton(page).click()
@@ -28,19 +28,19 @@ test.fail(`an unclosed quote is reported, not read as one long cell (${issue(2)}
   await expect(rule(page, 'E_CSV')).toBeVisible()
 })
 
-test.fail(`a row with more cells than the header is reported, not cut (${issue(2)})`, async ({ page }) => {
+test(`a row with more cells than the header is reported, not cut (${issue(2)})`, async ({ page }) => {
   await importFile(page, file('r.csv', 'prompt,completion\nq1,a1\nq2,Hello, world\n'), 2)
   await expect(rule(page, 'E_CSV').locator('td.num')).toHaveText('1')
 })
 
-test.fail(`two columns with the same name are both kept (${issue(2)})`, async ({ page }) => {
+test(`two columns with the same name are both kept (${issue(2)})`, async ({ page }) => {
   await newProject(page)
   await choose(page, file('d.csv', 'text,text\nfirst,second\n'))
   await expect(importButton(page)).toBeVisible()
   await expect(page.locator('.preview-cols')).toContainText('first', { timeout: 2000 })
 })
 
-test.fail(`a Latin-1 CSV is reported as invalid UTF-8 (${issue(2)})`, async ({ page }) => {
+test(`a Latin-1 CSV is reported as invalid UTF-8 (${issue(2)})`, async ({ page }) => {
   await importFile(page, file('l.csv', Buffer.from('prompt,completion\ncafé,open\ntea,closed\n', 'latin1')), 2)
   await expect(rule(page, 'E_UTF8').locator('td.num')).toHaveText('1')
 })

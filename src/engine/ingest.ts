@@ -4,7 +4,7 @@ import { readCsv, readJson, readJsonl, fromBytes, type FileKind, type RawItem } 
 import type { Row } from './pipeline.ts'
 
 export function toRow(item: RawItem, id: number, mapping: Mapping): Row {
-  if (item.error || !item.value) return { id, line: item.line, bytes: item.bytes, rec: null, parseError: item.error ?? 'E_JSON', badUtf8: item.badUtf8, raw: item.text }
+  if (item.error || !item.value) return { id, line: item.line, bytes: item.bytes, rec: null, parseError: item.error ?? 'E_JSON', parseMessage: item.message, badUtf8: item.badUtf8, raw: item.text }
   const { rec, label } = applyMapping(item.value as Record<string, unknown>, mapping)
   return { id, line: item.line, bytes: item.bytes || JSON.stringify(rec).length + 1, rec, label, badUtf8: item.badUtf8 }
 }
