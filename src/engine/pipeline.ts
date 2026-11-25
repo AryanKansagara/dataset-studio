@@ -142,7 +142,7 @@ export function stripUnknown(rec: Record<string, unknown>, fmt: Format): Record<
 
 // ---------- split ----------
 
-/** Seeded, stratified (by label when present) split. Returns ids of validation rows. */
+/** Seeded, stratified (by label when present) split of the requested share. Returns ids of validation rows. */
 export function splitRows(rows: Row[], s: SplitSettings): Set<number> {
   const val = new Set<number>()
   if (s.valFraction <= 0 || rows.length < 2) return val
@@ -154,10 +154,16 @@ export function splitRows(rows: Row[], s: SplitSettings): Set<number> {
     if (g) g.push(r)
     else groups.set(k, [r])
   }
-  for (const g of groups.values()) {
-    const sorted = g.map((r) => [keyedUnit(s.seed, r.id), r.id] as const).sort((a, b) => a[0] - b[0])
-    const n = Math.round(g.length * s.valFraction)
-    for (let i = 0; i < n; i++) val.add(sorted[i][1])
+  // largest remainder: every stratum gets its whole share, the rows left over go to the largest fractions (ties by seed)
+  const strata = [...groups].map(([k, rows]) => {
+    const share = Number((rows.length * s.valFraction).toFixed(9))
+    return { rows, n: Math.floor(share), rest: Math.round((share % 1) * 1e6), tie: keyedUnit(s.seed, `label ${k}`) }
+  })
+  let left = Math.round(Number((rows.length * s.valFraction).toFixed(9))) - strata.reduce((a, g) => a + g.n, 0)
+  for (const g of [...strata].sort((a, b) => b.rest - a.rest || a.tie - b.tie)) if (left > 0) { g.n++; left-- }
+  for (const g of strata) {
+    const sorted = g.rows.map((r) => [keyedUnit(s.seed, r.id), r.id] as const).sort((a, b) => a[0] - b[0])
+    for (let i = 0; i < g.n; i++) val.add(sorted[i][1])
   }
   return val
 }

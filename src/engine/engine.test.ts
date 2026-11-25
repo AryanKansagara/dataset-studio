@@ -192,6 +192,27 @@ test('split: seeded, stable, stratified by label, exact fraction per stratum', (
   assert.notDeepEqual([...splitRows(rows, { ...s, seed: 7 })].sort(), [...v1].sort())
 })
 
+test('split: the total is the requested share however small the labels are (#14)', () => {
+  const make = (...sizes: number[]) => sizes.flatMap((n, l) => [...Array(n)].map(() => l)).map((l, i) => row(i, conv(['user', `q${i}`], ['assistant', 'a']), `L${l}`))
+  const perLabel = (rows: Row[], val: Set<number>) => { const n: Record<string, number> = {}; for (const r of rows) if (val.has(r.id)) n[r.label!] = (n[r.label!] ?? 0) + 1; return n }
+  const s = { valFraction: 0.1, seed: 42, stratify: true }
+  for (const size of [1, 2, 4, 5, 7]) {
+    const rows = make(...Array(100).fill(size))
+    const val = splitRows(rows, s)
+    assert.equal(val.size, Math.round(size * 10))
+    assert.ok(Object.values(perLabel(rows, val)).every((n) => n === 1)) // no label gets two while others get none
+    assert.deepEqual(splitRows(rows, s), val)
+    assert.notDeepEqual(splitRows(rows, { ...s, seed: 7 }), val)
+    // the row order does not matter
+    assert.deepEqual([...splitRows([...rows].reverse(), s)].sort(), [...val].sort())
+  }
+  assert.deepEqual(perLabel(make(80, 20), splitRows(make(80, 20), s)), { L0: 8, L1: 2 })
+  assert.deepEqual(perLabel(make(20, 10), splitRows(make(20, 10), s)), { L0: 2, L1: 1 })
+  assert.deepEqual(perLabel(make(26, 4), splitRows(make(26, 4), s)), { L0: 3 })
+  assert.deepEqual(perLabel(make(94, 6), splitRows(make(94, 6), s)), { L0: 9, L1: 1 })
+  for (let f = 0; f <= 0.3; f += 0.01) for (const rows of [make(100), make(3, 50, 1, 1, 17)]) assert.equal(splitRows(rows, { ...s, valFraction: f }).size, Math.round(Number((rows.length * f).toFixed(9))))
+})
+
 test('leakage: validation rows that duplicate train are found and dropped by the op', () => {
   const rows = [...Array(40)].map((_, i) => row(i, conv(['user', `Unique question number ${i} about my parcel order status today`], ['assistant', `a${i}`])))
   for (let i = 40; i < 60; i++) rows.push(row(i, conv(['user', 'The very same repeated question about my parcel order status today'], ['assistant', 'same'])))
