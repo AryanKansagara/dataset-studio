@@ -176,7 +176,7 @@ test(`a minified {"data": [...]} document reads as its rows (${issue(13)})`, asy
   await importFile(page, file('min.json', JSON.stringify({ data: [{ prompt: 'p', completion: 'c' }, { prompt: 'q', completion: 'd' }] })), 2)
 })
 
-test.fail(`many small labels still get the requested validation share (${issue(14)})`, async ({ page }) => {
+test(`many small labels still get the requested validation share (${issue(14)})`, async ({ page }) => {
   // 100 labels with 4 rows each: 10% of 400 is 40 validation rows.
   const rows = [...Array(400).keys()].map((i) => ({ prompt: `Case ${i * 7919}`, completion: `Reply ${i * 104729}`, label: `L${i % 100}` }))
   await importFile(page, file('s.jsonl', jsonl(...rows)), 400)
