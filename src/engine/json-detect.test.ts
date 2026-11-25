@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { detectKind, fromBytes, readJson } from './parse.ts'
-import { readItems } from './ingest.ts'
+import { detectKind, fromBytes, jsonErrorAt, readJson } from './parse.ts'
+import { peekFrom, readItems } from './ingest.ts'
 
 const enc = (s: string) => new TextEncoder().encode(s)
 /** Reads a file the way the worker does. */
@@ -53,4 +53,31 @@ test('JSON documents: damaged ones are errors and invalid UTF-8 stays visible (#
   const latin1 = Uint8Array.from(Buffer.from('{"prompt":"caf\xe9","completion":"c"}', 'latin1'))
   assert.equal((await load('a.json', latin1)).items[0].badUtf8, true)
   assert.equal(readJson('[{"a":"�"}]')[0].badUtf8, undefined)
+})
+
+test('import preview: a file without a readable row says why (#16)', async () => {
+  for (const [name, content, want] of [
+    ['a.jsonl', '\n[1]\n', 'a.jsonl has no readable row. Line 2 is not a JSON object.'],
+    ['a.json', '[1]', 'a.json has no readable row. Row 1 is not a JSON object.'],
+    ['a.csv', 'a,b\n1\n', 'a.csv has no readable row. Line 2 could not be read. Row has 1 cell but the header has 2.'],
+    ['a.csv', 'a,b\n', 'a.csv has no data rows under the header.'],
+    ['a.json', '[]', 'a.json has no rows.'],
+  ]) {
+    const { kind, items } = await load(name, content)
+    assert.equal(peekFrom(kind, items, name).problem, want)
+  }
+  assert.equal(peekFrom('jsonl', [], 'a.jsonl', true).problem, 'a.jsonl is empty.')
+  assert.equal(peekFrom('jsonl', (await load('a.jsonl', '{bad\n{"a":1}\n')).items, 'a.jsonl').problem, undefined)
+})
+
+test('JSON documents: the error is on its own line (#16)', async () => {
+  const doc = JSON.stringify([{ a: 'x"\\\u0041', n: [-1.5e3, 0, true, null, {}, []] }, { b: 'y' }], null, 1)
+  assert.equal(jsonErrorAt(doc), doc.length)
+  // every cut and every single damaged character that the parser refuses is found inside the text (a cut one may be at its end)
+  for (let i = 0; i < doc.length; i++) for (const s of [doc.slice(0, i), doc.slice(0, i) + '#' + doc.slice(i + 1), doc.slice(0, i) + doc.slice(i + 1)]) {
+    let ok = true
+    try { JSON.parse(s) } catch { ok = false }
+    if (!ok) assert.ok(jsonErrorAt(s) < s.length || s.length === i, s)
+  }
+  for (const [s, line] of [['[\n{"a":1},\n{"a" 2},\n{"a":3}]', 3], ['[\n1,\n]', 3], ['{\n"a":1\n}\n{', 4], ['[\n"cut', 2], ['', 1], ['[1]\n]', 2]] as const) assert.equal(readJson(s)[0].line, line, s)
 })

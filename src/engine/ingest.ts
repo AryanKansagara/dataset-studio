@@ -26,12 +26,22 @@ export interface Peek {
   sample: Record<string, unknown>[]
   suggested: Mapping
   parseErrors: number
+  /** Why there is nothing to map, when no row could be read. */
+  problem?: string
 }
 
-export function peekFrom(kind: FileKind, items: RawItem[]): Peek {
+/** Says why no row could be read. */
+function noRows(kind: FileKind, items: RawItem[], name: string, blank: boolean, more: boolean): string {
+  const bad = items.find((i) => i.error)
+  if (!bad) return blank ? `${name} is empty.` : kind === 'csv' ? `${name} has no data rows under the header.` : `${name} has no rows.`
+  const what = bad.error === 'E_NOT_OBJECT' ? 'is not a JSON object' : bad.error === 'E_CSV' ? `could not be read. ${bad.message}` : `is not valid JSON${bad.detail ? `: ${bad.detail}` : ''}`
+  return `${name} has no readable row${more ? ` among its first ${items.length}` : ''}. ${kind === 'json' && bad.error === 'E_NOT_OBJECT' ? 'Row' : 'Line'} ${bad.line} ${what}${/[.]$/.test(what) ? '' : '.'}`
+}
+
+export function peekFrom(kind: FileKind, items: RawItem[], name = 'The file', blank = false, more = false): Peek {
   const sample = items.filter((i) => i.value).map((i) => i.value as Record<string, unknown>)
   const columns = columnsOf(sample)
-  return { kind, columns, sample: sample.slice(0, 25), suggested: suggestMapping(columns, sample), parseErrors: items.filter((i) => i.error).length }
+  return { kind, columns, sample: sample.slice(0, 25), suggested: suggestMapping(columns, sample), parseErrors: items.filter((i) => i.error).length, problem: sample.length ? undefined : noRows(kind, items, name, blank, more) }
 }
 
 /** Convenience for tests and the hero: bytes -> rows in one go. */

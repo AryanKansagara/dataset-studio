@@ -80,3 +80,29 @@ test('a file whose rows are all dropped or broken has no example to export (#15)
   await expect(check(page)).toContainText('0 examples (minimum 1)')
   await expect(page.getByText(/\d+ blocking/)).toBeVisible()
 })
+
+for (const [f, message] of [
+  [file('empty.jsonl', ''), 'empty.jsonl is empty.'],
+  [file('blank.csv', '\n \n'), 'blank.csv is empty.'],
+  [file('head.csv', 'prompt,completion\n'), 'head.csv has no data rows under the header.'],
+  [file('bad.jsonl', '\n{oops\n{again\n'), /bad\.jsonl has no readable row\. Line 2 is not valid JSON: .+/],
+  [file('cut.json', JSON.stringify([OK, OK], null, 2).slice(0, -20)), /cut\.json has no readable row\. Line 8 is not valid JSON: .+/],
+  [file('late.jsonl', '{oops\n'.repeat(300) + jsonl(OK)), 'late.jsonl has no readable row among its first 200. Line 1 is not valid JSON'],
+  [file('none.json', '{"data":[]}'), 'none.json has no rows.'],
+  [file('quote.csv', 'prompt,completion\n"a,b\n'), 'quote.csv has no readable row. Line 2 could not be read. A quote opened in this row is never closed'],
+] as const) {
+  test(`${f.name} says why it cannot be imported (#16)`, async ({ page }) => {
+    await newProject(page)
+    await choose(page, f)
+    await expect(page.getByRole('alert')).toContainText(message)
+    await expect(page.getByRole('heading', { name: 'Column mapping' })).toHaveCount(0)
+    await expect(importButton(page)).toBeDisabled()
+    await page.getByRole('button', { name: 'Back', exact: true }).click()
+    await choose(page, file('ok.jsonl', jsonl(OK)))
+    await expect(importButton(page)).toBeEnabled()
+  })
+}
+
+test('a first record over 1 MB is not called broken in the preview (#16)', async ({ page }) => {
+  await importFile(page, file('big.jsonl', jsonl({ prompt: 'p '.repeat(1 << 20), completion: 'c' }, OK)), 2)
+})

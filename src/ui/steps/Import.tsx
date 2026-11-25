@@ -191,10 +191,11 @@ function MappingStep({ peek, onCancel, onImport }: { peek: { info: SourceInfo; d
           </div>
           <span className="spacer" />
           <button className="btn secondary" onClick={onCancel}>Back</button>
-          <button className="btn" disabled={!ok} onClick={() => onImport(m)}>Import &amp; check <Icon name="arrow" size={13} /></button>
+          <button className="btn" disabled={!ok || !!peek.data.problem} onClick={() => onImport(m)}>Import &amp; check <Icon name="arrow" size={13} /></button>
         </div>
       </div>
 
+      {peek.data.problem ? <div className="card pad" role="alert" style={{ borderColor: 'var(--err)' }}><b>Nothing to import</b><p className="small" style={{ marginTop: 6, color: 'var(--err)', wordBreak: 'break-word' }}>{peek.data.problem}</p></div> : <>
       <div className="card pad">
         <div className="panel-h" style={{ marginTop: 0 }}><h3>Column mapping</h3><span className="spacer" />{peek.data.suggested.identity && <span className="badge ok"><Icon name="check" size={11} /> already in Together's {peek.data.suggested.format} schema</span>}</div>
         <div className="seg" role="group" aria-label="Target format" style={{ flexWrap: 'wrap' }}>
@@ -256,6 +257,7 @@ function MappingStep({ peek, onCancel, onImport }: { peek: { info: SourceInfo; d
           </table>
         </div>
       </div>
+      </>}
     </div>
   )
 }

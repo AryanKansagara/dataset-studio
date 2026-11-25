@@ -190,7 +190,7 @@ test(`the download button counts the rows that are in the file (${issue(15)})`, 
   await expect(page.getByRole('button', { name: 'e2e.train.jsonl' })).toContainText('· 1 rows', { timeout: 3000 })
 })
 
-test.fail(`an empty file says that it is empty (${issue(16)})`, async ({ page }) => {
+test(`an empty file says that it is empty (${issue(16)})`, async ({ page }) => {
   await newProject(page)
   await choose(page, file('empty.jsonl', ''))
   await expect(importButton(page).or(page.getByText(/empty|no rows/i)).first()).toBeVisible()
