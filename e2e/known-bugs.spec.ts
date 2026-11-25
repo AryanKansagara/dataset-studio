@@ -63,7 +63,7 @@ test.fail(`PII in tool-call arguments, reasoning and extra keys is found (${issu
   await expect(cardCount(page, 'PII and secrets')).toHaveText('3')
 })
 
-test.fail(`Export does not claim that everything fits when no token was counted (${issue(5)})`, async ({ page }) => {
+test(`Export does not claim that everything fits when no token was counted (${issue(5)})`, async ({ page }) => {
   await importFile(page, file('big.jsonl', jsonl(chat(['user', 'word '.repeat(90000)], ['assistant', 'Ok then.']))), 1)
   await step(page, 'Tokens')
   await expect(page.getByRole('heading', { name: 'Tokenizer failed to load' })).toBeVisible()
