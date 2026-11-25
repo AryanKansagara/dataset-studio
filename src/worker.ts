@@ -223,7 +223,10 @@ async function exportFile(p: { kind: 'jsonl' | 'parquet'; part: 'train' | 'val' 
   const attention_mask: number[][] = []
   const labels: number[][] = []
   pick.forEach((r, i) => {
-    const t = tokenizeRecord(r.rec!, format, tokenizer!, p.trainOnInputs, p.limit)
+    let t
+    try { t = tokenizeRecord(r.rec!, format, tokenizer!, p.trainOnInputs, p.limit) } catch (e) {
+      throw new Error(`Parquet export stopped at line ${r.line}: ${(e as Error).message}. Fix or drop that row, or export JSONL.`)
+    }
     input_ids.push(t.input_ids)
     attention_mask.push(t.input_ids.map(() => 1))
     labels.push(t.labels)
