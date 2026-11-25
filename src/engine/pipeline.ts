@@ -2,8 +2,8 @@
 import type { Format } from './mapping.ts'
 import { validateRecord, hasError, type Issue, type IssueCode, ISSUE_INFO } from './validate.ts'
 import {
-  answerText, dedupeText, detectLanguage, exactKey, findPii, fullText, isRefusal, labelStats, mapText, minhash,
-  nearDuplicateClusters, normalize, outlierBounds, promptText, redact, shingles, type LabelStats, type PiiKind,
+  answerText, dedupeText, detectLanguage, exactKey, findPiiInRecord, fullText, hasLabel, isRefusal, labelStats, mapText, minhash,
+  nearDuplicateClusters, normalize, outlierBounds, promptText, redactRecord, shingles, type LabelStats, type PiiKind,
 } from './quality.ts'
 import { countRecord, smartTruncate, tokenStats, type TokenizerLike, type TokenStats } from './tokens.ts'
 import { LIMITS } from './rules.ts'
@@ -15,7 +15,8 @@ export interface Row {
   bytes: number
   rec: Record<string, unknown> | null
   label?: string
-  parseError?: 'E_JSON' | 'E_NOT_OBJECT'
+  parseError?: 'E_JSON' | 'E_NOT_OBJECT' | 'E_CSV'
+  parseMessage?: string
   badUtf8?: boolean
   raw?: string
 }
@@ -81,7 +82,7 @@ const ISSUE_CACHE = new WeakMap<object, Issue[]>()
 
 export function rowIssues(row: Row, fmt: Format, limit?: number): Issue[] {
   const out: Issue[] = []
-  if (row.parseError) out.push({ code: row.parseError, sev: 'error', msg: ISSUE_INFO[row.parseError].title })
+  if (row.parseError) out.push({ code: row.parseError, sev: 'error', msg: row.parseMessage ?? ISSUE_INFO[row.parseError].title })
   if (row.badUtf8) out.push({ code: 'E_UTF8', sev: 'error', msg: 'Line contains bytes that are not valid UTF-8' })
   if (limit && row.bytes > limit * LIMITS.oversizeBytesPerToken)
     out.push({ code: 'E_OVERSIZE', sev: 'error', msg: `${(row.bytes / 1024).toFixed(0)} KB line cannot fit ${limit.toLocaleString()} tokens` })
@@ -235,7 +236,7 @@ export function applyOps(base: Row[], ops: Op[], ctx: PipelineCtx): PipelineResu
         keep((_, i) => !drop.has(i))
         break
       }
-      case 'redactPii': { const kinds = new Set(op.kinds); modify((rec) => mapText(rec, fmt, (s) => redact(s, kinds).text)); break }
+      case 'redactPii': { const kinds = new Set(op.kinds); modify((rec) => redactRecord(rec, kinds)); break }
       case 'dropRefusals': keep((r) => !r.rec || !isRefusal(answerText(r.rec, fmt))); break
       case 'filterLanguage': { const k = new Set(op.keep); keep((r) => !r.rec || k.has(detectLanguage(fullText(r.rec, fmt)))); break }
       case 'dropOutliers': {
@@ -253,10 +254,16 @@ export function applyOps(base: Row[], ops: Op[], ctx: PipelineCtx): PipelineResu
         const ls = labelStats(rows.map((r) => r.label), rows.map((r) => (r.rec ? answerText(r.rec, fmt) : '')))
         if (ls.labels.length < 2) break
         const cap = Math.max(1, Math.ceil(ls.labels[ls.labels.length - 1][1] * op.maxRatio))
-        const labelOf = (r: Row) => ls.source === 'column' ? r.label ?? '(none)' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
+        const labelOf = (r: Row) => ls.source === 'column' ? r.label ?? '' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
         const groups = new Map<string, Row[]>()
-        for (const r of rows) { const l = labelOf(r); const g = groups.get(l); if (g) g.push(r); else groups.set(l, [r]) }
         const keepIds = new Set<number>()
+        for (const r of rows) {
+          const l = labelOf(r)
+          if (!hasLabel(l)) { keepIds.add(r.id); continue } // not a class: never downsampled
+          const g = groups.get(l)
+          if (g) g.push(r)
+          else groups.set(l, [r])
+        }
         for (const g of groups.values()) {
           g.map((r) => [keyedUnit(ctx.split.seed + 7, r.id), r.id] as const).sort((a, b) => a[0] - b[0]).slice(0, cap).forEach(([, id]) => keepIds.add(id))
         }
@@ -388,7 +395,7 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
   const langOf = new Map<number, string>()
   for (const r of live) {
     const text = fullText(r.rec, fmt)
-    const hits = findPii(text)
+    const hits = findPiiInRecord(r.rec)
     if (hits.length) {
       piiRows++
       const kinds = new Set(hits.map((h) => h.kind))
@@ -426,8 +433,8 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
   const ls = labelStats(rows.map((r) => r.label), rows.map((r) => (r.rec ? answerText(r.rec, fmt) : '')))
   const valLabels = new Map<string, number>()
   if (ls.source !== 'none') for (const r of rows) if (val.has(r.id)) {
-    const l = ls.source === 'column' ? r.label ?? '(none)' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
-    valLabels.set(l, (valLabels.get(l) ?? 0) + 1)
+    const l = ls.source === 'column' ? r.label ?? '' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
+    if (hasLabel(l)) valLabels.set(l, (valLabels.get(l) ?? 0) + 1)
   }
 
   // leakage
