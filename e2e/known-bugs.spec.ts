@@ -142,7 +142,7 @@ test.fail(`a DPO pair is billed for its two sides, not twice for the longer one 
   await expect(stat(page, 'Billed tokens')).toHaveText('115', { timeout: 5000 })
 })
 
-test.fail(`secrets written as env vars or JSON, and E.164 phone numbers, are found (${issue(11)})`, async ({ page }) => {
+test(`secrets written as env vars or JSON, and E.164 phone numbers, are found (${issue(11)})`, async ({ page }) => {
   await importFile(page, file('s.jsonl', jsonl(
     { prompt: 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMIK7MDENGbPxRfiCYEXAMPLEKEY', completion: 'Rotate it.' },
     { prompt: 'config is {"password": "correcthorse12345"}', completion: 'Change it.' },
@@ -153,7 +153,7 @@ test.fail(`secrets written as env vars or JSON, and E.164 phone numbers, are fou
   await expect(cardCount(page, 'PII and secrets')).toHaveText('4', { timeout: 3000 })
 })
 
-test.fail(`redacting a card keeps the space after it (${issue(11)})`, async ({ page }) => {
+test(`redacting a card keeps the space after it (${issue(11)})`, async ({ page }) => {
   await importFile(page, file('c.jsonl', jsonl({ prompt: 'Card 4111 1111 1111 1111 was charged', completion: 'ok then' })), 1)
   await step(page, 'Quality')
   await page.getByRole('button', { name: 'Redact all' }).click()
