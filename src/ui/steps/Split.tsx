@@ -33,8 +33,8 @@ export function SplitStep({ project }: { project: Project }) {
             <label className="switch" style={{ marginTop: 18 }}><input type="checkbox" checked={project.split.stratify} onChange={(e) => setSplit({ stratify: e.target.checked })} />Stratify by label</label>
           </div>
           <div className="stackbar" style={{ marginTop: 18, height: 14 }}>
-            <div style={{ width: `${(100 * r.train) / Math.max(1, r.rows)}%`, background: 'var(--accent)' }} />
-            <div style={{ width: `${(100 * r.val) / Math.max(1, r.rows)}%`, background: 'var(--orange)' }} />
+            <div style={{ width: `${(100 * r.train) / Math.max(1, r.train + r.val)}%`, background: 'var(--accent)' }} />
+            <div style={{ width: `${(100 * r.val) / Math.max(1, r.train + r.val)}%`, background: 'var(--orange)' }} />
           </div>
           <div className="legend" style={{ marginTop: 10 }}>
             <span><i style={{ background: 'var(--accent)' }} />Train <b className="num">{fmtInt(r.train)}</b></span>

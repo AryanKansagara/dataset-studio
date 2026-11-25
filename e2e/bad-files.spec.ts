@@ -1,5 +1,5 @@
 import { test, expect } from './test.ts'
-import { check, choose, file, importButton, importFile, jsonl, newProject, rule, stat, step } from './helpers.ts'
+import { check, choose, downloaded, file, importButton, importFile, jsonl, lines, newProject, rule, stat, step } from './helpers.ts'
 import { parquet } from './hub.ts'
 
 const OK = { prompt: 'p', completion: 'c' }
@@ -54,4 +54,29 @@ test('numeric and missing fields are schema errors', async ({ page }) => {
   await importFile(page, file('n.jsonl', jsonl(OK, { prompt: 5, completion: 'c' }, { prompt: 'p', completion: null })), 3)
   await expect(rule(page, 'E_SCHEMA').locator('td.num')).toHaveText('2')
   await expect(stat(page, 'Clean')).toHaveText('1')
+})
+
+test('broken lines stay in the report and are in no file, button, card or split (#15)', async ({ page }) => {
+  const good = [...Array(10).keys()].map((i) => ({ prompt: `Case ${i * 7919}`, completion: `Reply ${i * 104729}` }))
+  await importFile(page, file('mix.jsonl', jsonl(...good, ...Array(10).fill('{broken'))), 20)
+  await expect(rule(page, 'E_JSON').locator('td.num')).toHaveText('10')
+  await step(page, 'Split & cost')
+  await expect(page.locator('.legend')).toContainText('Train 9Validation 1')
+  await step(page, 'Export')
+  await expect(check(page)).toContainText('10 examples (minimum 1)')
+  for (const [name, n] of [['e2e.train.jsonl', 9], ['e2e.validation.jsonl', 1]] as const) {
+    const b = page.getByRole('button', { name })
+    await expect(b).toContainText(`· ${n} rows`)
+    expect(lines((await downloaded(page, b)).text)).toHaveLength(n)
+  }
+  await page.getByRole('tab', { name: 'Dataset card' }).click()
+  await expect(page.locator('.codebox pre')).toContainText('| Examples | 10 (train 9, validation 1, seed 42) |')
+})
+
+test('a file whose rows are all dropped or broken has no example to export (#15)', async ({ page }) => {
+  await importFile(page, file('mix.jsonl', jsonl({ prompt: '', completion: '' }, '{broken')), 2)
+  await page.getByRole('button', { name: 'Fix all' }).click()
+  await step(page, 'Export')
+  await expect(check(page)).toContainText('0 examples (minimum 1)')
+  await expect(page.getByText(/\d+ blocking/)).toBeVisible()
 })

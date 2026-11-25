@@ -184,7 +184,7 @@ test(`many small labels still get the requested validation share (${issue(14)})`
   await expect(page.locator('.legend')).toContainText('Validation 40', { timeout: 3000 })
 })
 
-test.fail(`the download button counts the rows that are in the file (${issue(15)})`, async ({ page }) => {
+test(`the download button counts the rows that are in the file (${issue(15)})`, async ({ page }) => {
   await importFile(page, file('c.jsonl', jsonl({ prompt: 'p', completion: 'c' }, '{broken', '[1]')), 3)
   await step(page, 'Export')
   await expect(page.getByRole('button', { name: 'e2e.train.jsonl' })).toContainText('· 1 rows', { timeout: 3000 })

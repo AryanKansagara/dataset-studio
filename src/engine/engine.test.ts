@@ -213,6 +213,18 @@ test('split: the total is the requested share however small the labels are (#14)
   for (let f = 0; f <= 0.3; f += 0.01) for (const rows of [make(100), make(3, 50, 1, 1, 17)]) assert.equal(splitRows(rows, { ...s, valFraction: f }).size, Math.round(Number((rows.length * f).toFixed(9))))
 })
 
+test('split: rows that could not be read are in no part (#15)', () => {
+  const rows = [...Array(100)].map((_, i) => row(i, i % 2 ? conv(['user', `question ${i * 7919}`], ['assistant', `a${i}`]) : null, i % 2 ? `L${i % 10}` : undefined))
+  const split = { valFraction: 0.2, seed: 3, stratify: true }
+  const { report, result } = analyze(rows, [], { format: 'conversational', split }, { limit: 99 })
+  assert.deepEqual([report.rows, report.train, report.val], [100, 40, 10])
+  assert.ok([...result.val].every((id) => id % 2))
+  assert.deepEqual([...splitRows(rows.filter((r) => r.rec), split)].sort(), [...result.val].sort())
+  const pinned = applyOps(rows, [{ type: 'dropLeakage' }], { format: 'conversational', split })
+  assert.ok([...pinned.val].every((id) => id % 2))
+  assert.equal(analyze([row(0, null), row(1, null)], [], { format: 'text', split }, { limit: 99 }).report.train, 0)
+})
+
 test('leakage: validation rows that duplicate train are found and dropped by the op', () => {
   const rows = [...Array(40)].map((_, i) => row(i, conv(['user', `Unique question number ${i} about my parcel order status today`], ['assistant', `a${i}`])))
   for (let i = 40; i < 60; i++) rows.push(row(i, conv(['user', 'The very same repeated question about my parcel order status today'], ['assistant', 'same'])))
