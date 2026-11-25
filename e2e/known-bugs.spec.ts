@@ -168,11 +168,11 @@ test(`rows that differ only in their tool calls are not duplicates (${issue(12)}
   await expect(cardCount(page, 'Exact duplicates')).toHaveText('0', { timeout: 3000 })
 })
 
-test.fail(`JSON Lines in a .json file reads when the first record is over 4 KB (${issue(13)})`, async ({ page }) => {
+test(`JSON Lines in a .json file reads when the first record is over 4 KB (${issue(13)})`, async ({ page }) => {
   await importFile(page, file('long.json', jsonl({ prompt: 'p'.repeat(5000), completion: 'c' }, { prompt: 'p', completion: 'c' })), 2)
 })
 
-test.fail(`a minified {"data": [...]} document reads as its rows (${issue(13)})`, async ({ page }) => {
+test(`a minified {"data": [...]} document reads as its rows (${issue(13)})`, async ({ page }) => {
   await importFile(page, file('min.json', JSON.stringify({ data: [{ prompt: 'p', completion: 'c' }, { prompt: 'q', completion: 'd' }] })), 2)
 })
 
