@@ -130,7 +130,8 @@ async function peek(src: Source): Promise<Peek & { name: string; size: number }>
   } else if (kind === 'json') {
     for await (const it of readItems('json', streamFile(src.file))) { items.push(it); if (items.length >= 200) break }
   } else {
-    for await (const it of readItems(kind, streamFile(src.file.slice(0, 1 << 20) as File))) { items.push(it); if (items.length >= 200) break }
+    // a CSV is not cut for the preview: the last row would look like a broken one
+    for await (const it of readItems(kind, streamFile(kind === 'csv' ? src.file : src.file.slice(0, 1 << 20) as File))) { items.push(it); if (items.length >= 200) break }
   }
   return { ...peekFrom(kind, items), name: src.file.name, size: src.file.size }
 }
