@@ -284,6 +284,21 @@ test('commands: pinned version and the right flags for SFT and DPO', () => {
   assert.equal(limitFor({ ...DEFAULT_JOB, maxSeq: 999999 }), getModel(DEFAULT_JOB.model).ctxSft)
 })
 
+test('commands: a full job asks for full, and max_seq_length never exceeds the model limit (#9)', () => {
+  const files = { train: 't.jsonl', val: null }
+  const both = (job: Partial<typeof DEFAULT_JOB>) => [cliCommands({ ...DEFAULT_JOB, ...job }, files, 'conversational'), pythonCommands({ ...DEFAULT_JOB, ...job }, files, 'conversational')]
+  assert.match(both({ lora: false })[0], / --no-lora \\\n/)
+  assert.match(both({ lora: true })[0], / --lora \\\n/)
+  assert.match(both({ lora: false })[1], /lora=False/)
+  const m = getModel(DEFAULT_JOB.model)
+  for (const [job, want] of [[{ maxSeq: 131072 }, m.ctxSft], [{ maxSeq: 131072, method: 'dpo' }, m.ctxDpo], [{ maxSeq: 4096 }, 4096]] as const) {
+    const [cli, py] = both(job)
+    assert.match(cli, new RegExp(`--max-seq-length ${want} `))
+    assert.match(py, new RegExp(`max_seq_length=${want},`))
+  }
+  for (const c of both({ maxSeq: null })) assert.doesNotMatch(c, /max.seq.length/)
+})
+
 test('every model has a context length and a tokenizer repo or an explicit null', () => {
   for (const m of MODELS) { assert.ok(m.ctxSft > 0 && m.ctxDpo > 0, m.id); assert.ok(m.tokenizer === null || m.tokenizer.includes('/')) }
 })
