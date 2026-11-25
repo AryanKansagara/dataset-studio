@@ -132,7 +132,7 @@ test.fail(`the command's max_seq_length never exceeds the model's (${issue(9)})`
   await expect(page.locator('.codebox pre')).toContainText('--max-seq-length 65536', { timeout: 2000 })
 })
 
-test.fail(`a DPO pair is billed for its two sides, not twice for the longer one (${issue(10)})`, async ({ page, context }) => {
+test(`a DPO pair is billed for its two sides, not twice for the longer one (${issue(10)})`, async ({ page, context }) => {
   await serveTokenizer(context)
   // chosen side: user q (4) + assistant 100 words (103) = 107; rejected side: 4 + 4 = 8; together 115
   await importFile(page, file('d.jsonl', jsonl({ prompt: 'q', chosen: 'a '.repeat(100).trim(), rejected: 'b' })), 1)

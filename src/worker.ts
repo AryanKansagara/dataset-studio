@@ -4,7 +4,7 @@
 import { sniffKind, type FileKind, type RawItem } from './engine/parse.ts'
 import { peekFrom, readItems, toRow, type Peek } from './engine/ingest.ts'
 import { columnsOf, suggestMapping, type Format, type Mapping } from './engine/mapping.ts'
-import { analyze, cachedCounter, rowIssues, type Op, type PipelineResult, type Report, type Row, type SplitSettings } from './engine/pipeline.ts'
+import { analyze, cachedCounter, rowIssues, type Op, type PipelineResult, type Report, type Row, type SplitSettings, type TokenCounter } from './engine/pipeline.ts'
 import { renderRecord, tokenizeRecord, countRecord } from './engine/tokens.ts'
 import { majorityFormat } from './engine/validate.ts'
 import { messySupportSample } from './engine/sample.ts'
@@ -24,7 +24,7 @@ let base: Row[] = []
 let format: Format = 'conversational'
 let tokenizer: LoadedTokenizer | null = null
 let tokenizerModel = ''
-let counter: ((rec: Record<string, unknown>) => number) | undefined
+let counter: TokenCounter | undefined
 let last: { result: PipelineResult; report: Report } | null = null
 
 let reqId = 0

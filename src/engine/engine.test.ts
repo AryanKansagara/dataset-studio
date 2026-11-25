@@ -251,6 +251,19 @@ test('pre-tokenized encoding masks everything except assistant turns', () => {
 
 // ---------- cost / export ----------
 
+test('tokens: a preference row counts both sides, each cut at the limit (#10)', () => {
+  const pair = (id: number, n: number) => row(id, { input: { messages: [{ role: 'user', content: 'q' }] }, preferred_output: [{ role: 'assistant', content: 'a '.repeat(n).trim() }], non_preferred_output: [{ role: 'assistant', content: 'b' }] })
+  const t = (rows: Row[], valFraction: number, limit: number) => analyze(rows, [], { format: 'preference', split: { valFraction, seed: 1, stratify: false }, tokens: cachedCounter('preference', fakeTk) }, { limit }).report.tokens!
+  const one = t([pair(0, 100)], 0, 1000)
+  assert.deepEqual([one.train, one.val, one.total, one.billable, one.max, one.cut], [115, 0, 115, 115, 107, 0])
+  const cut = t([pair(0, 100)], 0, 100)
+  assert.deepEqual([cut.train, cut.total, cut.billable, cut.over, cut.cut], [108, 115, 108, 1, 7])
+  const tiny = t([pair(0, 100)], 0, 5)
+  assert.deepEqual([tiny.train, tiny.over, tiny.cut], [10, 1, 105])
+  const half = t([pair(0, 100), pair(1, 100)], 0.5, 1000)
+  assert.deepEqual([half.train, half.val, half.total], [115, 115, 230])
+})
+
 test('cost: tokens x epochs + validation x evals at the published price, with the minimum charge', () => {
   const m = getModel('Qwen/Qwen3.5-9B')
   const c = estimateCost({ model: m, method: 'sft', lora: true, epochs: 3, nEvals: 5, trainTokens: 10_000_000, valTokens: 500_000 })
