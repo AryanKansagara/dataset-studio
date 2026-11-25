@@ -104,5 +104,5 @@ for (const [f, message] of [
 }
 
 test('a first record over 1 MB is not called broken in the preview (#16)', async ({ page }) => {
-  await importFile(page, file('big.jsonl', jsonl({ prompt: 'p '.repeat(1 << 20), completion: 'c' }, OK)), 2)
+  await importFile(page, file('big.jsonl', jsonl({ prompt: 'p'.repeat((1 << 20) + 1), completion: 'c' }, OK)), 2)
 })
