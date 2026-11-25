@@ -16,6 +16,11 @@ export function usePath(): string {
   return useSyncExternalStore((s) => { subs.add(s); return () => { subs.delete(s) } }, () => location.pathname, () => '/')
 }
 
+/** The query string, for links that change only that. */
+export function useSearch(): string {
+  return useSyncExternalStore((s) => { subs.add(s); return () => { subs.delete(s) } }, () => location.search, () => '')
+}
+
 /** Intercept same-origin <a href> clicks so links stay client-side. */
 export function linkHandler(e: React.MouseEvent<HTMLAnchorElement>) {
   const a = e.currentTarget

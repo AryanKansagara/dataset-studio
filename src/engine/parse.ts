@@ -10,7 +10,9 @@ export interface RawItem {
   value?: unknown
   /** Raw text of the line, kept only when it failed to parse (for the error report). */
   text?: string
-  error?: 'E_JSON' | 'E_NOT_OBJECT'
+  error?: 'E_JSON' | 'E_NOT_OBJECT' | 'E_CSV'
+  /** What exactly is wrong, when the error code alone does not say it. */
+  message?: string
   badUtf8?: boolean
 }
 
@@ -86,61 +88,115 @@ export async function* readJsonl(chunks: AsyncIterable<Uint8Array>): AsyncGenera
   }
 }
 
-/** RFC 4180 CSV (quoted fields, escaped quotes, newlines inside quotes). Auto-detects , ; or tab. */
-export async function* readCsv(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<RawItem> {
-  const dec = new TextDecoder('utf-8')
-  let header: string[] | null = null
-  let delim = ''
-  let field = ''
-  let row: string[] = []
-  let inQ = false
-  let afterQ = false
+/** Split a CSV byte stream into records (newlines inside quotes belong to the record). All the structural
+ * characters are ASCII, so this works on bytes and does not depend on where the chunks end. */
+async function* csvRecords(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<{ bytes: Uint8Array; line: number; delim: string; unclosed: boolean }> {
+  let delim = 0
+  let started = false
+  let parts: Uint8Array[] = []
+  let len = 0
   let line = 1
-  let rowLine = 1
-  let rowBytes = 0
-  const out: RawItem[] = []
-  const endRow = () => {
-    row.push(field)
-    field = ''
-    if (!header) header = row.map((h, i) => h.trim() || `column_${i + 1}`)
-    else if (!(row.length === 1 && row[0] === '')) {
-      const value: Record<string, string> = {}
-      header.forEach((h, i) => { value[h] = row[i] ?? '' })
-      out.push({ line: rowLine, bytes: rowBytes, value })
-    }
-    row = []
-    rowBytes = 0
-    rowLine = line
+  let recLine = 1
+  // where in a cell we are: at its start, in plain text, inside quotes, or just after a quote inside quotes
+  let at: 'start' | 'text' | 'quoted' | 'quote' = 'start'
+  /** The head of the file, up to at least the first newline: drops a BOM and picks the delimiter. */
+  const begin = (buf: Uint8Array) => {
+    if (buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) buf = buf.subarray(3)
+    const nl = buf.indexOf(10)
+    const first = new TextDecoder().decode(nl === -1 ? buf : buf.subarray(0, nl))
+    const counts = [',', ';', '\t'].map((d) => [d, first.split(d).length] as const)
+    delim = counts.sort((a, b) => b[1] - a[1])[0][0].charCodeAt(0)
+    started = true
+    return buf
   }
-  const feed = (text: string) => {
-    if (!delim) {
-      const first = text.split('\n', 1)[0]
-      const counts = [',', ';', '\t'].map((d) => [d, first.split(d).length] as const)
-      delim = counts.sort((a, b) => b[1] - a[1])[0][0]
-    }
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i]
-      rowBytes++
-      if (inQ) {
-        if (c === '"') {
-          if (text[i + 1] === '"') { field += '"'; i++ } else { inQ = false; afterQ = true }
-        } else { if (c === '\n') line++; field += c }
+  const scan = function* (chunk: Uint8Array) {
+    let start = 0
+    for (let i = 0; i < chunk.length; i++) {
+      const c = chunk[i]
+      if (at === 'quoted') {
+        if (c === 34) at = 'quote'
+        else if (c === 10) line++
         continue
       }
-      if (c === '"' && field === '' && !afterQ) { inQ = true; continue }
-      if (c === delim) { row.push(field); field = ''; afterQ = false; continue }
-      if (c === '\r') continue
-      if (c === '\n') { line++; afterQ = false; endRow(); continue }
-      field += c
+      if (at === 'quote' && c === 34) { at = 'quoted'; continue }
+      if (c === 10) {
+        line++
+        const piece = chunk.subarray(start, i)
+        yield { bytes: concat([...parts, piece], len + piece.length), line: recLine, delim: String.fromCharCode(delim), unclosed: false }
+        parts = []; len = 0; start = i + 1; recLine = line; at = 'start'
+      } else if (c === delim) at = 'start'
+      else if (c === 13) { if (at === 'quote') at = 'text' }
+      else at = at === 'start' && c === 34 ? 'quoted' : 'text'
     }
+    if (start < chunk.length) { parts.push(chunk.slice(start)); len += chunk.length - start }
   }
+  let head: Uint8Array[] = []
+  const joinHead = () => concat(head, head.reduce((a, p) => a + p.length, 0))
   for await (const chunk of chunks) {
-    feed(dec.decode(chunk, { stream: true }))
-    while (out.length) yield out.shift()!
+    if (started) { yield* scan(chunk); continue }
+    head.push(chunk.slice())
+    if (chunk.indexOf(10) === -1) continue
+    yield* scan(begin(joinHead()))
+    head = []
   }
-  feed(dec.decode())
-  if (field !== '' || row.length) endRow()
-  while (out.length) yield out.shift()!
+  if (!started) yield* scan(begin(joinHead()))
+  if (len) yield { bytes: concat(parts, len), line: recLine, delim: String.fromCharCode(delim), unclosed: (at as string) === 'quoted' }
+}
+
+function csvCells(text: string, delim: string): string[] {
+  const row: string[] = []
+  let field = ''
+  let inQ = false
+  let afterQ = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inQ) {
+      if (c !== '"') field += c
+      else if (text[i + 1] === '"') { field += '"'; i++ }
+      else { inQ = false; afterQ = true }
+    } else if (c === '"' && field === '' && !afterQ) inQ = true
+    else if (c === delim) { row.push(field); field = ''; afterQ = false }
+    else if (c !== '\r') field += c
+  }
+  row.push(field)
+  return row
+}
+
+/** RFC 4180 CSV (quoted fields, escaped quotes, newlines inside quotes). Auto-detects , ; or tab.
+ * Rows that cannot be matched to the header are reported (E_CSV), never cut or padded. */
+export async function* readCsv(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<RawItem> {
+  let header: string[] | null = null
+  let named = 0 // cells up to the last named column; the ones after it may be missing
+  for await (const rec of csvRecords(chunks)) {
+    const { text, badUtf8 } = decodeLine(rec.bytes)
+    const row = csvCells(text, rec.delim)
+    const item: RawItem = { line: rec.line, bytes: rec.bytes.length + 1, badUtf8: badUtf8 || undefined }
+    const fail = (message: string) => ({ ...item, error: 'E_CSV' as const, message, text: text.slice(0, 400) })
+    if (rec.unclosed) {
+      yield fail('A quote opened in this row is never closed, so the rest of the file could not be read')
+      continue
+    }
+    if (row.length === 1 && row[0] === '') continue
+    if (!header) {
+      const seen = new Set<string>()
+      header = row.map((h, i) => {
+        const base = h.trim() || `column_${i + 1}`
+        let name = base
+        for (let n = 2; seen.has(name); n++) name = `${base}_${n}`
+        seen.add(name)
+        return name
+      })
+      row.forEach((h, i) => { if (h.trim()) named = i + 1 })
+      continue
+    }
+    if (row.length < named || row.slice(header.length).some((c) => c.trim())) {
+      yield fail(`Row has ${row.length} cell${row.length === 1 ? '' : 's'} but the header has ${header.length}`)
+      continue
+    }
+    const value: Record<string, string> = {}
+    header.forEach((h, i) => { value[h] = row[i] ?? '' })
+    yield { ...item, value }
+  }
 }
 
 /** JSON document: an array of objects, or an object holding one array (e.g. {"data": [...]}). */

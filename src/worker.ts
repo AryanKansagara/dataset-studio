@@ -130,7 +130,8 @@ async function peek(src: Source): Promise<Peek & { name: string; size: number }>
   } else if (kind === 'json') {
     for await (const it of readItems('json', streamFile(src.file))) { items.push(it); if (items.length >= 200) break }
   } else {
-    for await (const it of readItems(kind, streamFile(src.file.slice(0, 1 << 20) as File))) { items.push(it); if (items.length >= 200) break }
+    // a CSV is not cut for the preview: the last row would look like a broken one
+    for await (const it of readItems(kind, streamFile(kind === 'csv' ? src.file : src.file.slice(0, 1 << 20) as File))) { items.push(it); if (items.length >= 200) break }
   }
   return { ...peekFrom(kind, items), name: src.file.name, size: src.file.size }
 }
@@ -222,7 +223,10 @@ async function exportFile(p: { kind: 'jsonl' | 'parquet'; part: 'train' | 'val' 
   const attention_mask: number[][] = []
   const labels: number[][] = []
   pick.forEach((r, i) => {
-    const t = tokenizeRecord(r.rec!, format, tokenizer!, p.trainOnInputs, p.limit)
+    let t
+    try { t = tokenizeRecord(r.rec!, format, tokenizer!, p.trainOnInputs, p.limit) } catch (e) {
+      throw new Error(`Parquet export stopped at line ${r.line}: ${(e as Error).message}. Fix or drop that row, or export JSONL.`)
+    }
     input_ids.push(t.input_ids)
     attention_mask.push(t.input_ids.map(() => 1))
     labels.push(t.labels)

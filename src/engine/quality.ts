@@ -222,6 +222,35 @@ export function mapText(rec: Record<string, unknown>, fmt: Format, f: (s: string
   }
 }
 
+/** Every string of a record: text, tool calls and their arguments, reasoning, tools, unknown keys.
+ * Whatever is exported has to be scanned. Inline images (data: URLs) are not text. */
+function eachString(v: unknown, f: (s: string, key: string) => string, key = ''): unknown {
+  if (typeof v === 'string') return v.startsWith('data:') ? v : f(v, key)
+  if (Array.isArray(v)) return v.map((x) => eachString(x, f, key))
+  if (isObj(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, eachString(x, f, k)]))
+  return v
+}
+
+export function findPiiInRecord(rec: Record<string, unknown>): PiiHit[] {
+  const hits: PiiHit[] = []
+  eachString(rec, (s) => { hits.push(...findPii(s)); return s })
+  return hits
+}
+
+const parses = (s: string) => { try { JSON.parse(s); return true } catch { return false } }
+
+export function redactRecord(rec: Record<string, unknown>, kinds: Set<PiiKind>): Record<string, unknown> {
+  const f = (s: string, key: string): string => {
+    const out = redact(s, kinds).text
+    // tool arguments are JSON in a string and must stay valid JSON
+    if (key !== 'arguments' || out === s || parses(out) || !parses(s)) return out
+    const digits = (v: unknown): unknown => typeof v === 'number' && redact(String(v), kinds).n ? redact(String(v), kinds).text
+      : Array.isArray(v) ? v.map(digits) : isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, digits(x)])) : v
+    return JSON.stringify(digits(eachString(JSON.parse(s), (x) => redact(x, kinds).text)))
+  }
+  return eachString(rec, f) as Record<string, unknown>
+}
+
 // ---------- refusals ----------
 
 const REFUSAL = [
@@ -306,17 +335,20 @@ export function outlierBounds(lengths: number[], k = 3.5): { lo: number; hi: num
 
 export interface LabelStats { labels: [string, number][]; ratio: number; classification: boolean; source: 'column' | 'answer' | 'none' }
 
+/** A row has no label when the column is missing or blank, or the row could not be parsed. */
+export const hasLabel = (x: string | undefined): x is string => x !== undefined && x.trim() !== ''
+
 /** Label distribution from an explicit label column, or from short answers when the data looks like classification. */
 export function labelStats(explicit: (string | undefined)[], answers: string[]): LabelStats {
   let source: LabelStats['source'] = 'none'
   let values: string[] = []
-  if (explicit.some((x) => x !== undefined)) { source = 'column'; values = explicit.map((x) => x ?? '(none)') }
+  if (explicit.some(hasLabel)) { source = 'column'; values = explicit.filter(hasLabel) }
   else {
     const short = answers.map((a) => a.trim()).filter((a) => a && a.length <= 40 && a.split(/\s+/).length <= 4)
     const distinct = new Set(short.map((a) => a.toLowerCase()))
     if (answers.length >= 20 && short.length >= answers.length * 0.9 && distinct.size <= Math.max(2, Math.min(30, answers.length / 5))) {
       source = 'answer'
-      values = answers.map((a) => a.trim().toLowerCase())
+      values = answers.filter(hasLabel).map((a) => a.trim().toLowerCase())
     }
   }
   const counts = new Map<string, number>()
