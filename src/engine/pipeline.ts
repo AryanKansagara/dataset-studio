@@ -15,7 +15,8 @@ export interface Row {
   bytes: number
   rec: Record<string, unknown> | null
   label?: string
-  parseError?: 'E_JSON' | 'E_NOT_OBJECT'
+  parseError?: 'E_JSON' | 'E_NOT_OBJECT' | 'E_CSV'
+  parseMessage?: string
   badUtf8?: boolean
   raw?: string
 }
@@ -81,7 +82,7 @@ const ISSUE_CACHE = new WeakMap<object, Issue[]>()
 
 export function rowIssues(row: Row, fmt: Format, limit?: number): Issue[] {
   const out: Issue[] = []
-  if (row.parseError) out.push({ code: row.parseError, sev: 'error', msg: ISSUE_INFO[row.parseError].title })
+  if (row.parseError) out.push({ code: row.parseError, sev: 'error', msg: row.parseMessage ?? ISSUE_INFO[row.parseError].title })
   if (row.badUtf8) out.push({ code: 'E_UTF8', sev: 'error', msg: 'Line contains bytes that are not valid UTF-8' })
   if (limit && row.bytes > limit * LIMITS.oversizeBytesPerToken)
     out.push({ code: 'E_OVERSIZE', sev: 'error', msg: `${(row.bytes / 1024).toFixed(0)} KB line cannot fit ${limit.toLocaleString()} tokens` })
