@@ -31,6 +31,13 @@ npm install
 npm run dev      # http://localhost:4334
 npm test         # engine tests (node --test)
 npm run build
+npm run test:e2e # browser tests (Playwright), see below
 ```
 
 Copy `.env.example` to `.env` to enable sync (optional).
+
+## End-to-end tests
+
+`npm run test:e2e` builds the app and runs a [Playwright](https://playwright.dev) suite (Chromium) in `e2e/` against the production build served by `vite preview` (port 4173, or `E2E_PORT`). Install the browser once with `npx playwright install chromium`. The tests are signed out and offline: Hugging Face is refused or replaced by small local stand-ins, any other outside request or uncaught page error fails the test. Token counts, cost, the split and the Parquet labels are worked out by hand in the specs. `e2e/known-bugs.spec.ts` pins open bugs with `test.fail` and the issue link.
+
+GitHub Actions (job `test`) runs install, build, unit and E2E tests on every pull request and push to `main`. `vercel.json` deploys only `main`.
