@@ -53,7 +53,7 @@ test(`an unparseable line is not a label class (${issue(3)})`, async ({ page }) 
   await expect(cardCount(page, 'Label balance')).toHaveText('1.0:1')
 })
 
-test.fail(`PII in tool-call arguments, reasoning and extra keys is found (${issue(4)})`, async ({ page }) => {
+test(`PII in tool-call arguments, reasoning and extra keys is found (${issue(4)})`, async ({ page }) => {
   await importFile(page, file('t.jsonl', jsonl(
     { messages: [{ role: 'user', content: 'Send it' }, { role: 'assistant', content: 'Sent.', tool_calls: [{ id: '1', type: 'function', function: { name: 'send', arguments: '{"to":"jo@acme.io"}' } }] }, { role: 'tool', tool_call_id: '1', content: 'ok' }, { role: 'assistant', content: 'Done.' }] },
     { messages: [{ role: 'user', content: 'Think' }, { role: 'assistant', content: 'Ok.', reasoning_content: 'They are sam@acme.io' }] },

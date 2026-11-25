@@ -222,6 +222,35 @@ export function mapText(rec: Record<string, unknown>, fmt: Format, f: (s: string
   }
 }
 
+/** Every string of a record: text, tool calls and their arguments, reasoning, tools, unknown keys.
+ * Whatever is exported has to be scanned. Inline images (data: URLs) are not text. */
+function eachString(v: unknown, f: (s: string, key: string) => string, key = ''): unknown {
+  if (typeof v === 'string') return v.startsWith('data:') ? v : f(v, key)
+  if (Array.isArray(v)) return v.map((x) => eachString(x, f, key))
+  if (isObj(v)) return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, eachString(x, f, k)]))
+  return v
+}
+
+export function findPiiInRecord(rec: Record<string, unknown>): PiiHit[] {
+  const hits: PiiHit[] = []
+  eachString(rec, (s) => { hits.push(...findPii(s)); return s })
+  return hits
+}
+
+const parses = (s: string) => { try { JSON.parse(s); return true } catch { return false } }
+
+export function redactRecord(rec: Record<string, unknown>, kinds: Set<PiiKind>): Record<string, unknown> {
+  const f = (s: string, key: string): string => {
+    const out = redact(s, kinds).text
+    // tool arguments are JSON in a string and must stay valid JSON
+    if (key !== 'arguments' || out === s || parses(out) || !parses(s)) return out
+    const digits = (v: unknown): unknown => typeof v === 'number' && redact(String(v), kinds).n ? redact(String(v), kinds).text
+      : Array.isArray(v) ? v.map(digits) : isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, digits(x)])) : v
+    return JSON.stringify(digits(eachString(JSON.parse(s), (x) => redact(x, kinds).text)))
+  }
+  return eachString(rec, f) as Record<string, unknown>
+}
+
 // ---------- refusals ----------
 
 const REFUSAL = [
