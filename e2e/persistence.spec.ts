@@ -1,0 +1,62 @@
+import { test, expect } from './test.ts'
+import { chat, downloaded, exportAll, file, importFile, jsonl, log, stat, step } from './helpers.ts'
+
+const two = file('two.jsonl', jsonl(chat(['user', 'One'], ['assistant', 'Uno']), chat(['user', 'one'], ['assistant', 'uno'])))
+
+test('data, mapping, fixes and settings survive a reload', async ({ page }) => {
+  await importFile(page, two, 2)
+  await step(page, 'Quality')
+  await page.getByRole('button', { name: 'Remove duplicates' }).click()
+  await expect(log(page)).toHaveCount(1)
+  await step(page, 'Split & cost')
+  await page.getByLabel('Epochs').fill('7')
+  await expect(page.getByLabel('Epochs')).toHaveValue('7')
+  await page.reload()
+  await expect(page.getByLabel('Epochs')).toHaveValue('7')
+  await step(page, 'Validate')
+  await expect(stat(page, 'Examples')).toHaveText('1of 2')
+  expect(await exportAll(page)).toEqual([chat(['user', 'One'], ['assistant', 'Uno'])])
+})
+
+test('rename, delete and undo a project', async ({ page }) => {
+  await importFile(page, two, 2)
+  await page.getByRole('heading', { name: 'E2E' }).click()
+  await page.getByLabel('Project name').fill('Renamed')
+  await page.getByLabel('Project name').press('Enter')
+  await page.getByRole('link', { name: '← Projects' }).click()
+  await page.getByRole('button', { name: 'Delete Renamed' }).click()
+  await expect(page.getByRole('heading', { name: 'Turn a raw export into a file that trains.' })).toBeVisible()
+  await page.getByRole('button', { name: 'Undo' }).click()
+  await expect(page.getByRole('link', { name: 'Open Renamed' })).toBeVisible()
+  await page.reload()
+  await page.getByRole('link', { name: 'Open Renamed' }).click()
+  await expect(stat(page, 'Examples')).toHaveText('2')
+})
+
+test('defaults and theme persist, and apply to new projects', async ({ page }) => {
+  await page.goto('/settings')
+  await page.getByLabel('Validation share').fill('0.25')
+  await page.getByLabel('Epochs').fill('9')
+  await page.getByRole('button', { name: 'Dark', exact: true }).click()
+  await page.reload()
+  await expect(page.getByLabel('Epochs')).toHaveValue('9')
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
+  await importFile(page, two, 2)
+  await step(page, 'Split & cost')
+  await expect(page.getByLabel('Epochs')).toHaveValue('9')
+  await expect(page.getByText('Validation share · 25%')).toBeVisible()
+})
+
+test('the backup holds projects and stats but no rows, and local data can be wiped', async ({ page }) => {
+  await importFile(page, file('s.jsonl', jsonl({ prompt: 'zebra-in-the-data', completion: 'giraffe-in-the-data' })), 1, 'Backup me')
+  await step(page, 'Versions')
+  await expect(page.getByRole('heading', { name: 'v1 → v1' })).toBeVisible()
+  await page.goto('/settings')
+  const { text } = await downloaded(page, page.getByRole('button', { name: 'Export all (JSON)' }))
+  expect(JSON.parse(text).projects[0]).toMatchObject({ name: 'Backup me', source: { name: 's.jsonl', rows: 1 }, versions: [{ n: 1, stats: { rows: 1 } }] })
+  expect(text).not.toMatch(/zebra|giraffe/)
+  await page.getByRole('button', { name: 'Delete local projects' }).click()
+  await page.getByRole('dialog').getByRole('button', { name: 'Delete' }).click()
+  await page.goto('/app')
+  await expect(page.getByRole('heading', { name: 'Turn a raw export into a file that trains.' })).toBeVisible()
+})
