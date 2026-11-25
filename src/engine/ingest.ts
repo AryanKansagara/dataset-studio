@@ -1,6 +1,6 @@
 /** Source rows -> canonical rows, plus the peek used by the mapping step. */
 import { applyMapping, columnsOf, suggestMapping, type Mapping } from './mapping.ts'
-import { readCsv, readJson, readJsonl, fromBytes, type FileKind, type RawItem } from './parse.ts'
+import { decodeLine, readCsv, readJson, readJsonl, fromBytes, type FileKind, type RawItem } from './parse.ts'
 import type { Row } from './pipeline.ts'
 
 export function toRow(item: RawItem, id: number, mapping: Mapping): Row {
@@ -15,8 +15,8 @@ export async function* readItems(kind: Exclude<FileKind, 'parquet'>, chunks: Asy
   else {
     const parts: Uint8Array[] = []
     for await (const c of chunks) parts.push(c)
-    const text = new TextDecoder().decode(await new Blob(parts as BlobPart[]).arrayBuffer())
-    yield* readJson(text)
+    const { text, badUtf8 } = decodeLine(new Uint8Array(await new Blob(parts as BlobPart[]).arrayBuffer()))
+    yield* readJson(text, badUtf8)
   }
 }
 

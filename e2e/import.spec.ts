@@ -1,5 +1,5 @@
 import { test, expect } from './test.ts'
-import { choose, exportAll, field, file, importButton, importFile, jsonl, newProject, stat, step } from './helpers.ts'
+import { chat, choose, exportAll, field, file, importButton, importFile, jsonl, newProject, stat, step } from './helpers.ts'
 import { parquet, serveDataset } from './hub.ts'
 
 const QA = [{ prompt: 'What is the capital of Peru?', completion: 'Lima.' }, { prompt: 'How many legs has a spider?', completion: 'Eight, always.' }]
@@ -76,4 +76,9 @@ test('a public Hugging Face dataset imports through its Parquet export', async (
   await expect(stat(page, 'Examples')).toHaveText('3')
   await step(page, 'Import & map')
   await expect(page.getByText('hf://acme/tiny (default/train)').first()).toBeVisible()
+})
+
+test('a pretty-printed single conversation in a .json file is one example (#13)', async ({ page }) => {
+  await importFile(page, file('one.json', JSON.stringify(chat(['user', 'q'], ['assistant', 'a']), null, 2)), 1)
+  await expect(stat(page, 'Clean')).toHaveText('1')
 })

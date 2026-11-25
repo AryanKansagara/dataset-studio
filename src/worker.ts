@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 /** The engine runs here so a 500 MB file never blocks the UI. Files stream in
  * chunks; raw rows never leave this worker except as exported files. */
-import { sniffKind, type FileKind, type RawItem } from './engine/parse.ts'
+import { detectKind, type FileKind, type RawItem } from './engine/parse.ts'
 import { peekFrom, readItems, toRow, type Peek } from './engine/ingest.ts'
 import { columnsOf, suggestMapping, type Format, type Mapping } from './engine/mapping.ts'
 import { analyze, cachedCounter, rowIssues, type Op, type PipelineResult, type Report, type Row, type SplitSettings, type TokenCounter } from './engine/pipeline.ts'
@@ -107,7 +107,7 @@ async function hfItems(src: Extract<Source, { kind: 'hf' }>, maxRows: number): P
 
 async function fileKind(file: File): Promise<FileKind> {
   const head = new Uint8Array(await file.slice(0, 8192).arrayBuffer())
-  return sniffKind(file.name, head)
+  return detectKind(file.name, head, () => streamFile(file))
 }
 
 async function peek(src: Source): Promise<Peek & { name: string; size: number }> {

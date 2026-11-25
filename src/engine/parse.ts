@@ -32,6 +32,21 @@ export function sniffKind(name: string, head: Uint8Array): FileKind {
   return 'csv'
 }
 
+/** sniffKind, but a file that starts with "{" is judged by its whole first line: more lines after a complete object are
+ * JSON Lines, an object on its own is a document. */
+export async function detectKind(name: string, head: Uint8Array, body: () => AsyncIterable<Uint8Array>): Promise<FileKind> {
+  const kind = sniffKind(name, head)
+  if (kind === 'csv' || kind === 'parquet' || /\.(jsonl|ndjson)$/i.test(name) || !new TextDecoder().decode(head).trimStart().startsWith('{')) return kind
+  let first: string | null = null
+  for await (const bytes of byteLines(body())) {
+    const t = lossy.decode(bytes).trim()
+    if (!t) continue
+    if (first !== null) { try { JSON.parse(first); return 'jsonl' } catch { return kind } }
+    first = t
+  }
+  return 'json'
+}
+
 const fatal = new TextDecoder('utf-8', { fatal: true })
 const lossy = new TextDecoder('utf-8')
 
@@ -199,20 +214,31 @@ export async function* readCsv(chunks: AsyncIterable<Uint8Array>): AsyncGenerato
   }
 }
 
-/** JSON document: an array of objects, or an object holding one array (e.g. {"data": [...]}). */
-export function readJson(text: string): RawItem[] {
+const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
+/** A list of chat turns is one value of an example, not a list of examples. */
+const isTurns = (v: unknown) => Array.isArray(v) && v.every((m) => isObject(m) && (('role' in m && ('content' in m || 'tool_calls' in m)) || ('from' in m && 'value' in m)))
+const WRAPPER_KEY = /^(?:data|rows|examples|train|records|items|instances)$/i
+const EXAMPLE_KEY = /^(?:messages|conversations?|prompt|completion|instruction|output|question|answer|response|chosen|rejected|preferred_output|non_preferred_output|text)$/i
+
+/** The rows of a JSON object: those in its list ({"data": [...]}), or the object itself when it is one example. */
+function rowsOfObject(doc: Record<string, unknown>): unknown[] {
+  const entries = Object.entries(doc)
+  const named = entries.find(([k, v]) => WRAPPER_KEY.test(k) && Array.isArray(v))
+  if (named) return named[1] as unknown[]
+  if (entries.some(([k, v]) => EXAMPLE_KEY.test(k) && (typeof v === 'string' || isTurns(v)))) return [doc]
+  return (entries.find(([, v]) => Array.isArray(v) && v.some(isObject) && !isTurns(v))?.[1] as unknown[] | undefined) ?? [doc]
+}
+
+/** JSON document: an array of objects, an object holding one array (e.g. {"data": [...]}), or one example. */
+export function readJson(text: string, badUtf8 = false): RawItem[] {
   let doc: unknown
   try { doc = JSON.parse(text) } catch (e) {
     return [{ line: 1, bytes: text.length, error: 'E_JSON', text: String((e as Error).message).slice(0, 200) }]
   }
-  let arr: unknown[] | null = Array.isArray(doc) ? doc : null
-  if (!arr && doc && typeof doc === 'object') {
-    const inner = Object.values(doc as object).find(Array.isArray)
-    arr = (inner as unknown[]) ?? [doc]
-  }
-  return (arr ?? []).map((v, i) => {
-    const ok = typeof v === 'object' && v !== null && !Array.isArray(v)
-    return ok ? { line: i + 1, bytes: 0, value: v } : { line: i + 1, bytes: 0, error: 'E_NOT_OBJECT' as const, text: JSON.stringify(v)?.slice(0, 200) }
+  const arr = Array.isArray(doc) ? doc : isObject(doc) ? rowsOfObject(doc) : []
+  return arr.map((v, i) => {
+    const bad = badUtf8 && JSON.stringify(v).includes('\ufffd') ? { badUtf8: true } : {}
+    return isObject(v) ? { line: i + 1, bytes: 0, value: v, ...bad } : { line: i + 1, bytes: 0, error: 'E_NOT_OBJECT' as const, text: JSON.stringify(v)?.slice(0, 200), ...bad }
   })
 }
 
