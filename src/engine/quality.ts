@@ -306,17 +306,20 @@ export function outlierBounds(lengths: number[], k = 3.5): { lo: number; hi: num
 
 export interface LabelStats { labels: [string, number][]; ratio: number; classification: boolean; source: 'column' | 'answer' | 'none' }
 
+/** A row has no label when the column is missing or blank, or the row could not be parsed. */
+export const hasLabel = (x: string | undefined): x is string => x !== undefined && x.trim() !== ''
+
 /** Label distribution from an explicit label column, or from short answers when the data looks like classification. */
 export function labelStats(explicit: (string | undefined)[], answers: string[]): LabelStats {
   let source: LabelStats['source'] = 'none'
   let values: string[] = []
-  if (explicit.some((x) => x !== undefined)) { source = 'column'; values = explicit.map((x) => x ?? '(none)') }
+  if (explicit.some(hasLabel)) { source = 'column'; values = explicit.filter(hasLabel) }
   else {
     const short = answers.map((a) => a.trim()).filter((a) => a && a.length <= 40 && a.split(/\s+/).length <= 4)
     const distinct = new Set(short.map((a) => a.toLowerCase()))
     if (answers.length >= 20 && short.length >= answers.length * 0.9 && distinct.size <= Math.max(2, Math.min(30, answers.length / 5))) {
       source = 'answer'
-      values = answers.map((a) => a.trim().toLowerCase())
+      values = answers.filter(hasLabel).map((a) => a.trim().toLowerCase())
     }
   }
   const counts = new Map<string, number>()

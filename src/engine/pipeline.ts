@@ -2,7 +2,7 @@
 import type { Format } from './mapping.ts'
 import { validateRecord, hasError, type Issue, type IssueCode, ISSUE_INFO } from './validate.ts'
 import {
-  answerText, dedupeText, detectLanguage, exactKey, findPii, fullText, isRefusal, labelStats, mapText, minhash,
+  answerText, dedupeText, detectLanguage, exactKey, findPii, fullText, hasLabel, isRefusal, labelStats, mapText, minhash,
   nearDuplicateClusters, normalize, outlierBounds, promptText, redact, shingles, type LabelStats, type PiiKind,
 } from './quality.ts'
 import { countRecord, smartTruncate, tokenStats, type TokenizerLike, type TokenStats } from './tokens.ts'
@@ -253,10 +253,16 @@ export function applyOps(base: Row[], ops: Op[], ctx: PipelineCtx): PipelineResu
         const ls = labelStats(rows.map((r) => r.label), rows.map((r) => (r.rec ? answerText(r.rec, fmt) : '')))
         if (ls.labels.length < 2) break
         const cap = Math.max(1, Math.ceil(ls.labels[ls.labels.length - 1][1] * op.maxRatio))
-        const labelOf = (r: Row) => ls.source === 'column' ? r.label ?? '(none)' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
+        const labelOf = (r: Row) => ls.source === 'column' ? r.label ?? '' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
         const groups = new Map<string, Row[]>()
-        for (const r of rows) { const l = labelOf(r); const g = groups.get(l); if (g) g.push(r); else groups.set(l, [r]) }
         const keepIds = new Set<number>()
+        for (const r of rows) {
+          const l = labelOf(r)
+          if (!hasLabel(l)) { keepIds.add(r.id); continue } // not a class: never downsampled
+          const g = groups.get(l)
+          if (g) g.push(r)
+          else groups.set(l, [r])
+        }
         for (const g of groups.values()) {
           g.map((r) => [keyedUnit(ctx.split.seed + 7, r.id), r.id] as const).sort((a, b) => a[0] - b[0]).slice(0, cap).forEach(([, id]) => keepIds.add(id))
         }
@@ -426,8 +432,8 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
   const ls = labelStats(rows.map((r) => r.label), rows.map((r) => (r.rec ? answerText(r.rec, fmt) : '')))
   const valLabels = new Map<string, number>()
   if (ls.source !== 'none') for (const r of rows) if (val.has(r.id)) {
-    const l = ls.source === 'column' ? r.label ?? '(none)' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
-    valLabels.set(l, (valLabels.get(l) ?? 0) + 1)
+    const l = ls.source === 'column' ? r.label ?? '' : (r.rec ? answerText(r.rec, fmt).trim().toLowerCase() : '')
+    if (hasLabel(l)) valLabels.set(l, (valLabels.get(l) ?? 0) + 1)
   }
 
   // leakage

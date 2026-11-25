@@ -45,7 +45,7 @@ test.fail(`a Latin-1 CSV is reported as invalid UTF-8 (${issue(2)})`, async ({ p
   await expect(rule(page, 'E_UTF8').locator('td.num')).toHaveText('1')
 })
 
-test.fail(`an unparseable line is not a label class (${issue(3)})`, async ({ page }) => {
+test(`an unparseable line is not a label class (${issue(3)})`, async ({ page }) => {
   // 50 A, 50 B and one broken line: balanced, so there is nothing to downsample.
   const rows = [...Array(100).keys()].map((i) => ({ prompt: `Case ${i * 7919}`, completion: `Reply ${i * 104729}`, label: i % 2 ? 'A' : 'B' }))
   await importFile(page, file('l.jsonl', jsonl(...rows, '{broken')), 101)
