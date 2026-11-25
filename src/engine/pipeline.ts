@@ -142,9 +142,11 @@ export function stripUnknown(rec: Record<string, unknown>, fmt: Format): Record<
 
 // ---------- split ----------
 
-/** Seeded, stratified (by label when present) split of the requested share. Returns ids of validation rows. */
-export function splitRows(rows: Row[], s: SplitSettings): Set<number> {
+/** Seeded, stratified (by label when present) split of the requested share. Rows that could not be read are in
+ * neither part, because they are in no file. Returns ids of validation rows. */
+export function splitRows(all: Row[], s: SplitSettings): Set<number> {
   const val = new Set<number>()
+  const rows = all.filter((r) => r.rec)
   if (s.valFraction <= 0 || rows.length < 2) return val
   const groups = new Map<string, Row[]>()
   const strat = s.stratify && rows.some((r) => r.label !== undefined)
@@ -325,7 +327,9 @@ export interface Example { id: number; line: number; text: string; extra?: strin
 export interface Report {
   format: Format
   baseRows: number
+  /** every row left by the pipeline, also those that could not be read */
   rows: number
+  /** rows in the exported files */
   train: number
   val: number
   stratified: boolean
@@ -502,8 +506,8 @@ export function analyze(base: Row[], ops: Op[], ctx: PipelineCtx, opt: AnalyzeOp
   }
 
   const report: Report = {
-    format: fmt, baseRows: base.length, rows: rows.length, train: rows.length - val.size, val: val.size,
-    stratified: ctx.split.stratify && rows.some((r) => r.label !== undefined),
+    format: fmt, baseRows: base.length, rows: rows.length, train: live.length - val.size, val: val.size,
+    stratified: ctx.split.stratify && live.some((r) => r.label !== undefined),
     issues: { byCode, rowsWithErrors, rowsWithWarnings, list, truncatedList },
     quality: {
       exactDup: { rows: exactRows, groups: groupKeys.size, examples: exactEx },

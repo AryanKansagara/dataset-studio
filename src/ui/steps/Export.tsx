@@ -42,7 +42,7 @@ export function ExportStep({ project }: { project: Project }) {
     { ok: r.quality.pii.rows === 0, text: r.quality.pii.rows ? `${fmtInt(r.quality.pii.rows)} rows contain PII or secrets` : 'No PII or secrets detected' },
     { ok: r.quality.leakage.rows === 0, text: r.quality.leakage.rows ? `${fmtInt(r.quality.leakage.rows)} validation rows leak from train` : 'No train/validation leakage' },
     { ok: r.quality.exactDup.rows === 0, warn: true, text: r.quality.exactDup.rows ? `${fmtInt(r.quality.exactDup.rows)} exact duplicates` : 'No exact duplicates' },
-    { ok: r.rows >= 1, text: `${fmtInt(r.rows)} examples (minimum 1)` },
+    { ok: r.train + r.val >= 1, text: `${fmtInt(r.train + r.val)} examples (minimum 1)` },
   ]
   const blocking = checks.filter((c) => !c.ok && !c.warn).length
 

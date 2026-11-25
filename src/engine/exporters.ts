@@ -122,7 +122,7 @@ export function datasetCard(c: CardInput): string {
     `| Version | ${c.versionLabel} (${c.createdAt.slice(0, 10)}) |`,
     `| Source | ${c.source} |`,
     `| Format | ${FORMAT_LABEL[r.format]} |`,
-    `| Examples | ${r.rows.toLocaleString()} (train ${r.train.toLocaleString()}, validation ${r.val.toLocaleString()}${r.stratified ? ', stratified' : ''}, seed ${c.job.seed}) |`,
+    `| Examples | ${(r.train + r.val).toLocaleString()} (train ${r.train.toLocaleString()}, validation ${r.val.toLocaleString()}${r.stratified ? ', stratified' : ''}, seed ${c.job.seed}) |`,
     `| Target model | \`${m.id}\` (${c.job.lora ? 'LoRA' : 'full'} ${c.job.method.toUpperCase()}) |`,
   ]
   if (t) {

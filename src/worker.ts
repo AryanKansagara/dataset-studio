@@ -204,7 +204,7 @@ function rowDetail(rowId: number, limit: number) {
   return {
     row: { ...row, rec: row.rec }, original: original && original.rec !== row.rec ? original : null,
     issues, rendered, tokens, dropped: last && !fromResult ? last.result.dropped.get(rowId) ?? null : null,
-    split: last && fromResult ? (last.result.val.has(rowId) ? 'validation' : 'train') : null,
+    split: last && fromResult?.rec ? (last.result.val.has(rowId) ? 'validation' : 'train') : null,
   }
 }
 
