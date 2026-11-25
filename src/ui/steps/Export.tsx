@@ -27,10 +27,18 @@ export function ExportStep({ project }: { project: Project }) {
   const t = r.tokens
   const cost = t ? estimateCost({ model: getModel(job.model), method: job.method, lora: job.lora, epochs: job.epochs, nEvals: r.val ? job.nEvals : 0, trainTokens: t.train, valTokens: t.val }) : null
 
+  // no counts means unknown, never "fits"
+  const { tkState, tkError, tk } = session.s
+  const basis = !t ? '' : tk?.approximate ? ' (estimated: no exact tokenizer for this model)' : !t.exact ? ` (estimated from ${fmtInt(t.sampled)} sampled rows)` : ''
+  const tokenCheck = t && tkState === 'ready'
+    ? { ok: t.over === 0, text: (t.over ? `${fmtInt(t.over)} examples exceed ${fmtInt(limit)} tokens and will be cut` : basis ? `No example found over ${fmtInt(limit)} tokens` : `Everything fits in ${fmtInt(limit)} tokens`) + basis }
+    : { ok: false, text: (tkState === 'error' ? `Token lengths were not checked: the tokenizer failed to load${tkError ? ` (${tkError})` : ''}` : 'Token lengths are not checked yet: the tokenizer is still loading')
+      + (project.ops.some((o) => o.type === 'truncate') ? '. The truncate fix has not been applied' : '') }
+
   const checks: { ok: boolean; warn?: boolean; text: string }[] = [
     { ok: r.issues.rowsWithErrors === 0, text: r.issues.rowsWithErrors ? `${fmtInt(r.issues.rowsWithErrors)} rows still fail schema validation` : 'Every row matches the documented schema' },
     { ok: !(r.issues.byCode.W_UNKNOWN_KEY), warn: true, text: r.issues.byCode.W_UNKNOWN_KEY ? `${fmtInt(r.issues.byCode.W_UNKNOWN_KEY)} rows carry undocumented keys` : 'No undocumented keys' },
-    { ok: !t || t.over === 0, text: t?.over ? `${fmtInt(t.over)} examples exceed ${fmtInt(limit)} tokens and will be cut` : `Everything fits in ${fmtInt(limit)} tokens` },
+    tokenCheck,
     { ok: r.quality.pii.rows === 0, text: r.quality.pii.rows ? `${fmtInt(r.quality.pii.rows)} rows contain PII or secrets` : 'No PII or secrets detected' },
     { ok: r.quality.leakage.rows === 0, text: r.quality.leakage.rows ? `${fmtInt(r.quality.leakage.rows)} validation rows leak from train` : 'No train/validation leakage' },
     { ok: r.quality.exactDup.rows === 0, warn: true, text: r.quality.exactDup.rows ? `${fmtInt(r.quality.exactDup.rows)} exact duplicates` : 'No exact duplicates' },

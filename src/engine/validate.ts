@@ -13,7 +13,7 @@ export interface Issue {
 }
 
 export type IssueCode =
-  | 'E_JSON' | 'E_NOT_OBJECT' | 'E_UTF8' | 'E_OVERSIZE'
+  | 'E_JSON' | 'E_NOT_OBJECT' | 'E_CSV' | 'E_UTF8' | 'E_OVERSIZE'
   | 'E_SCHEMA' | 'E_MIXED_FORMAT' | 'E_ROLE' | 'E_ROLE_ORDER' | 'E_EMPTY_TURN'
   | 'E_NO_ASSISTANT' | 'W_FINAL_NOT_ASSISTANT' | 'W_UNKNOWN_KEY' | 'E_WEIGHT' | 'E_DPO_OUTPUT'
   | 'W_WHITESPACE'
@@ -21,6 +21,7 @@ export type IssueCode =
 export const ISSUE_INFO: Record<IssueCode, { title: string; fix: string }> = {
   E_JSON: { title: 'Line is not valid JSON', fix: 'Drop the line, or fix the quoting at the source.' },
   E_NOT_OBJECT: { title: 'Line is JSON but not an object', fix: 'Every line must be a single {...} object.' },
+  E_CSV: { title: 'CSV row does not match the header', fix: 'Quote cells that contain the delimiter, close every quote, or drop the row.' },
   E_UTF8: { title: 'Invalid UTF-8 bytes', fix: 'Together requires UTF-8. Re-export as UTF-8 or drop the line.' },
   E_OVERSIZE: { title: 'Line cannot fit in max sequence length', fix: 'Truncate smartly or drop.' },
   E_SCHEMA: { title: 'Schema error', fix: 'Field missing or of the wrong type.' },
