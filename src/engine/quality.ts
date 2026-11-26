@@ -145,10 +145,13 @@ export type PiiKind = 'email' | 'phone' | 'card' | 'secret' | 'ip'
 
 export const PII_LABEL: Record<PiiKind, string> = { email: 'Email address', phone: 'Phone number', card: 'Card number', secret: 'API key / secret', ip: 'IP address' }
 
+const SECRET_NAME = '(?:api[_-]?key|secret(?:[_-]?access)?(?:[_-]?key)?(?:[_-]?base)?|password|passwd|token)'
+const SECRET_VALUE = '[A-Za-z0-9_\\-/+=]{12,}'
 const SECRET_PATTERNS: RegExp[] = [
   /\bsk-(?:proj-|ant-[a-z0-9]+-)?[A-Za-z0-9_-]{20,}/g,      // sk- style provider keys
   /\bAKIA[0-9A-Z]{16}\b/g,                                  // AWS access key id
   /\bgh[pousr]_[A-Za-z0-9]{36,}\b/g,                         // GitHub tokens
+  /\bgithub_pat_[A-Za-z0-9_]{20,}/g,                         // GitHub fine-grained tokens
   /\bxox[abprs]-[A-Za-z0-9-]{10,}\b/g,                       // Slack
   /\bhf_[A-Za-z0-9]{30,}\b/g,                                // Hugging Face
   /\bAIza[0-9A-Za-z_-]{35}\b/g,                              // Google API key
@@ -156,10 +159,16 @@ const SECRET_PATTERNS: RegExp[] = [
   /\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b/g, // JWT
   /-----BEGIN (?:RSA |EC |OPENSSH |)PRIVATE KEY-----[\s\S]*?-----END (?:RSA |EC |OPENSSH |)PRIVATE KEY-----/g,
   /\b(?:api[_-]?key|secret|password|passwd|token)\s*[:=]\s*["']?[A-Za-z0-9_\-/+=]{12,}["']?/gi,
+  // The same as an env var (AWS_SECRET_ACCESS_KEY=...) or a JSON key ("client_secret": "..."). Only the value (group 1) is the
+  // hit, so JSON stays valid; a quoted value runs to its closing quote.
+  new RegExp(`(?<![A-Za-z0-9])${SECRET_NAME}\\s*[:=]\\s*(${SECRET_VALUE})`, 'gi'),
+  new RegExp(`${SECRET_NAME}\\\\*["']\\s*[:=]\\s*\\\\*["'](${SECRET_VALUE}[^\\s"'\\\\]*)`, 'gi'),
+  new RegExp(`(?<![A-Za-z0-9])${SECRET_NAME}\\s*[:=]\\s*\\\\*["'](${SECRET_VALUE}[^\\s"'\\\\]*)`, 'gi'),
 ]
 const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g
 const PHONE = /(?<![\w.]|\d[\s.-])(?:\+\d{1,3}[\s.-]?)?(?:\(\d{2,4}\)[\s.-]?|\d{2,4}[\s.-])\d{3,4}[\s.-]\d{3,4}(?!\w|[\s.-]\d)/g
-const CARD = /\b(?:\d[ -]?){13,19}\b/g
+const E164 = /(?<![\w+])\+[1-9]\d{8,14}(?!\w|\.\d)/g
+const CARD = /\b\d(?:[ -]?\d){12,18}\b/g
 const IPV4 = /\b(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b/g
 
 function luhn(digits: string): boolean {
@@ -180,13 +189,22 @@ export function findPii(text: string): PiiHit[] {
   const hits: PiiHit[] = []
   const add = (kind: PiiKind, re: RegExp, ok: (s: string) => boolean = () => true) => {
     re.lastIndex = 0
-    for (let m; (m = re.exec(text)); ) if (ok(m[0])) hits.push({ kind, start: m.index, end: m.index + m[0].length, text: m[0] })
+    for (let m; (m = re.exec(text)); ) {
+      const s = m[1] ?? m[0] // a group, if any, is the end of the match
+      const end = m.index + m[0].length
+      const start = end - s.length
+      // a value that is wholly an email, card or phone number keeps that kind
+      if (m[1] && hits.some((h) => h.kind !== 'secret' && h.start === start && h.end === end)) continue
+      if (ok(s)) hits.push({ kind, start, end, text: s })
+    }
   }
-  for (const re of SECRET_PATTERNS) add('secret', re)
+  const isCard = (s: string) => { const d = s.replace(/\D/g, ''); return d.length >= 13 && d.length <= 19 && luhn(d) }
   add('email', EMAIL)
-  add('card', CARD, (s) => { const d = s.replace(/\D/g, ''); return d.length >= 13 && d.length <= 19 && luhn(d) })
+  add('card', CARD, isCard)
   add('phone', PHONE, (s) => { const d = s.replace(/\D/g, ''); return d.length >= 9 && d.length <= 15 })
+  add('phone', E164, (s) => !isCard(s))
   add('ip', IPV4, (s) => !/^(?:0|127|255)\./.test(s) && s.split('.').length === 4)
+  for (const re of SECRET_PATTERNS) add('secret', re)
   // keep the earliest, longest non-overlapping hits (a secret beats a phone inside it)
   hits.sort((a, b) => a.start - b.start || b.end - b.start - (a.end - a.start))
   const out: PiiHit[] = []
@@ -246,7 +264,10 @@ export function redactRecord(rec: Record<string, unknown>, kinds: Set<PiiKind>):
     if (key !== 'arguments' || out === s || parses(out) || !parses(s)) return out
     const digits = (v: unknown): unknown => typeof v === 'number' && redact(String(v), kinds).n ? redact(String(v), kinds).text
       : Array.isArray(v) ? v.map(digits) : isObj(v) ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, digits(x)])) : v
-    return JSON.stringify(digits(eachString(JSON.parse(s), (x) => redact(x, kinds).text)))
+    const json = JSON.stringify(digits(eachString(JSON.parse(s), (x) => redact(x, kinds).text)))
+    // a secret that is recognised by its key ("password": ...) is only visible in the whole text
+    const whole = redact(json, kinds).text
+    return parses(whole) ? whole : json
   }
   return eachString(rec, f) as Record<string, unknown>
 }
