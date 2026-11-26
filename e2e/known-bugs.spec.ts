@@ -161,7 +161,7 @@ test(`redacting a card keeps the space after it (${issue(11)})`, async ({ page }
   expect((await exportAll(page))[0].prompt).toBe('Card [CARD] was charged')
 })
 
-test.fail(`rows that differ only in their tool calls are not duplicates (${issue(12)})`, async ({ page }) => {
+test(`rows that differ only in their tool calls are not duplicates (${issue(12)})`, async ({ page }) => {
   const call = (city: string) => ({ messages: [{ role: 'user', content: 'Weather there?' }, { role: 'assistant', content: '', tool_calls: [{ id: '1', type: 'function', function: { name: 'weather', arguments: `{"city":"${city}"}` } }] }] })
   await importFile(page, file('t.jsonl', jsonl(call('Oslo'), call('Lima'))), 2)
   await step(page, 'Quality')
